@@ -8,8 +8,8 @@
 }
 
 html {
-  /* Fix iOS 100vh issue — use dvh where supported */
-  height: 100%;
+  /* Fix iOS 100vh issue — use dvh where supported, vh as fallback */
+  height: 100vh;
   height: 100dvh;
 }
 
@@ -17,11 +17,16 @@ body {
   font-family: 'Noto Sans TC', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  min-height: 100%;
+  min-height: 100vh;
   min-height: 100dvh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: none;
+}
+
+/* Prevent iOS Safari auto-zoom on input focus — inputs must be >= 16px */
+input, textarea, select {
+  font-size: 16px !important;
 }
 
 /* Safe area for bottom tab bar on notched devices */

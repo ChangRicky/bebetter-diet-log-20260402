@@ -22,7 +22,7 @@ export function SegmentedControl<T extends string>({
           <button
             key={option}
             onClick={() => onChange(option)}
-            className={`flex-1 py-2.5 px-3 text-sm font-medium transition-all duration-200 ${
+            className={`flex-1 py-3 px-3 min-h-[44px] text-sm font-medium transition-all duration-200 ${
               isSelected
                 ? selectedColor
                 : 'bg-white text-gray-500 active:bg-gray-100'

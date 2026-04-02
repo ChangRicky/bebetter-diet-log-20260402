@@ -17,6 +17,30 @@ const ROW_HEIGHT = 72;
 const BRAND_PRIMARY = '#d0502a';
 const BRAND_GOLD = '#efa93b';
 
+/** Polyfill for CanvasRenderingContext2D.roundRect — missing on older Safari/Chrome */
+function safeRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number | number[]
+) {
+  const radius = typeof r === 'number' ? r : r[0] ?? 0;
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, w, h, radius);
+    return;
+  }
+  // Manual fallback using arcs
+  const rr = Math.min(radius, w / 2, h / 2);
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.arcTo(x + w, y, x + w, y + rr, rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.arcTo(x + w, y + h, x + w - rr, y + h, rr);
+  ctx.lineTo(x + rr, y + h);
+  ctx.arcTo(x, y + h, x, y + h - rr, rr);
+  ctx.lineTo(x, y + rr);
+  ctx.arcTo(x, y, x + rr, y, rr);
+  ctx.closePath();
+}
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -161,7 +185,7 @@ export async function composeMealCard(record: MealRecord): Promise<string> {
   const pillText = record.mealType;
   const pillW = ctx.measureText(pillText).width + 32;
   ctx.beginPath();
-  ctx.roundRect(PAD, y - 4, pillW, 40, 20);
+  safeRoundRect(ctx, PAD, y - 4, pillW, 40, 20);
   ctx.fill();
   ctx.fillStyle = '#FFFFFF';
   ctx.textBaseline = 'middle';
@@ -229,14 +253,14 @@ function drawItemChips(ctx: CanvasRenderingContext2D, items: FoodItem[], sx: num
       // Warm background chip
       ctx.fillStyle = '#FFF3E8';
       ctx.beginPath();
-      ctx.roundRect(sx + chip.x, sy + chip.y, chip.width, chip.height, CHIP_RADIUS);
+      safeRoundRect(ctx, sx + chip.x, sy + chip.y, chip.width, chip.height, CHIP_RADIUS);
       ctx.fill();
 
       // Border
       ctx.strokeStyle = '#FDDCB5';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.roundRect(sx + chip.x, sy + chip.y, chip.width, chip.height, CHIP_RADIUS);
+      safeRoundRect(ctx, sx + chip.x, sy + chip.y, chip.width, chip.height, CHIP_RADIUS);
       ctx.stroke();
 
       ctx.fillStyle = '#92400E';
@@ -339,7 +363,7 @@ export async function composeBehaviorCard(record: BehaviorRecord): Promise<strin
     // Row background
     ctx.fillStyle = ROW_BG;
     ctx.beginPath();
-    ctx.roundRect(PAD, y, CARD_WIDTH - PAD * 2, ROW_HEIGHT - 8, 12);
+    safeRoundRect(ctx, PAD, y, CARD_WIDTH - PAD * 2, ROW_HEIGHT - 8, 12);
     ctx.fill();
 
     const centerY = y + (ROW_HEIGHT - 8) / 2;
@@ -367,7 +391,7 @@ export async function composeBehaviorCard(record: BehaviorRecord): Promise<strin
     ctx.textBaseline = 'top';
     ctx.fillStyle = ROW_BG;
     ctx.beginPath();
-    ctx.roundRect(PAD, y, CARD_WIDTH - PAD * 2, noteBlockH, 12);
+    safeRoundRect(ctx, PAD, y, CARD_WIDTH - PAD * 2, noteBlockH, 12);
     ctx.fill();
 
     ctx.fillStyle = TEXT;

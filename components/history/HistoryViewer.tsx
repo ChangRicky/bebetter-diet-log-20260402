@@ -28,7 +28,7 @@ export const HistoryViewer: React.FC<HistoryViewerProps> = ({ records }) => {
           <button
             key={f.id}
             onClick={() => setFilter(f.id)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            className={`px-4 py-2.5 min-h-[44px] rounded-full text-sm font-medium transition-colors ${
               filter === f.id
                 ? 'bg-[#d0502a] text-white'
                 : 'bg-gray-100 text-gray-600'
@@ -94,7 +94,7 @@ const MealCard: React.FC<{ record: MealRecord }> = ({ record }) => {
           <button
             onClick={handleExport}
             disabled={exporting}
-            className="text-xs text-[#d0502a] font-medium px-2 py-1 rounded-lg bg-[#FFF3E8] active:bg-[#FFE8D6] disabled:opacity-50"
+            className="text-xs text-[#d0502a] font-medium px-3 py-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-[#FFF3E8] active:bg-[#FFE8D6] disabled:opacity-50"
           >
             {exporting ? '...' : '💾 下載'}
           </button>
@@ -168,11 +168,49 @@ const BehaviorCard: React.FC<{ record: BehaviorRecord }> = ({ record }) => {
   );
 };
 
-function downloadImage(dataUrl: string, fileName: string) {
-  const link = document.createElement('a');
-  link.href = dataUrl;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+/** Cross-device image download — handles iOS, Android, and desktop */
+async function downloadImage(dataUrl: string, fileName: string) {
+  try {
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
+    // Detect touch Apple devices where <a download> silently fails
+    const isTouchApple =
+      'ontouchstart' in window &&
+      navigator.maxTouchPoints > 0 &&
+      (/Mac|iPad|iPhone|iPod/.test(navigator.platform) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
+    if (!isTouchApple) {
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      return;
+    }
+
+    // iOS: try Web Share API
+    if (navigator.share && navigator.canShare) {
+      const file = new File([blob], fileName, { type: 'image/jpeg' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file] });
+        URL.revokeObjectURL(blobUrl);
+        return;
+      }
+    }
+
+    // Fallback: open in new tab for long-press save
+    window.open(blobUrl, '_blank');
+  } catch {
+    // Last resort
+    try {
+      const r = await fetch(dataUrl);
+      const b = await r.blob();
+      window.open(URL.createObjectURL(b), '_blank');
+    } catch { /* swallow */ }
+  }
 }

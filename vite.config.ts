@@ -8,8 +8,9 @@ export default defineConfig(({ mode }) => {
       plugins: [react()],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       },
+      // VITE_LIFF_ID is automatically available via import.meta.env
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),

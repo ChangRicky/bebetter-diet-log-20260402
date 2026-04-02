@@ -19,7 +19,7 @@ export const TabBar: React.FC<TabBarProps> = ({ activeTab, onTabChange }) => {
         <button
           key={tab.id}
           onClick={() => onTabChange(tab.id)}
-          className={`flex-1 flex flex-col items-center py-2 pt-3 transition-colors ${
+          className={`flex-1 flex flex-col items-center py-2 pt-3 min-h-[56px] transition-colors ${
             activeTab === tab.id
               ? 'text-[#d0502a]'
               : 'text-gray-400 active:text-gray-600'

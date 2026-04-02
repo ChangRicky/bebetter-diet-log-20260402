@@ -13,7 +13,7 @@ const TIPS = [
 
 export const WelcomePage: React.FC<WelcomePageProps> = ({ onStart }) => {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#FFF8F0] via-white to-[#FEF3E8] flex flex-col items-center px-6 py-10">
+    <div className="bg-gradient-to-b from-[#FFF8F0] via-white to-[#FEF3E8] flex flex-col items-center px-6 py-10 min-h-screen" style={{ minHeight: '100dvh' }}>
       {/* Logo */}
       <div className="mt-8 mb-6 text-center">
         <h1

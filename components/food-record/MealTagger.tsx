@@ -98,7 +98,7 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
         />
         <button
           onClick={onBack}
-          className="absolute top-3 left-3 bg-black/40 text-white w-8 h-8 rounded-full flex items-center justify-center text-lg backdrop-blur-sm"
+          className="absolute top-3 left-3 bg-black/40 text-white w-11 h-11 rounded-full flex items-center justify-center text-lg backdrop-blur-sm"
         >
           ←
         </button>
@@ -146,7 +146,7 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
                 {items.length > 1 && (
                   <button
                     onClick={() => removeItem(index)}
-                    className="w-7 h-7 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-lg active:bg-gray-200 flex-shrink-0"
+                    className="w-9 h-9 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-lg active:bg-gray-200 flex-shrink-0"
                   >
                     ×
                   </button>
@@ -183,7 +183,7 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
                         <button
                           onClick={() => updateTagQty(index, entry.tag, -0.5)}
                           disabled={entry.qty <= 0.5}
-                          className="w-7 h-7 rounded-lg bg-white shadow-sm flex items-center justify-center text-gray-600 active:bg-gray-50 disabled:opacity-30 font-bold text-sm"
+                          className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center text-gray-600 active:bg-gray-50 disabled:opacity-30 font-bold text-base"
                         >
                           −
                         </button>
@@ -193,7 +193,7 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
                         />
                         <button
                           onClick={() => updateTagQty(index, entry.tag, 0.5)}
-                          className="w-7 h-7 rounded-lg bg-white shadow-sm flex items-center justify-center text-gray-600 active:bg-gray-50 font-bold text-sm"
+                          className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center text-gray-600 active:bg-gray-50 font-bold text-base"
                         >
                           +
                         </button>
@@ -250,7 +250,9 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
   );
 };
 
-/** Tappable qty display — click to type a number directly */
+/** Tappable qty display — tap to type a number directly.
+ *  iOS fix: use a hidden input that's always in DOM so focus() works
+ *  within the same user gesture (no setTimeout). */
 const QtyInput: React.FC<{ value: number; onChange: (v: number) => void }> = ({ value, onChange }) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -259,7 +261,11 @@ const QtyInput: React.FC<{ value: number; onChange: (v: number) => void }> = ({ 
   const startEdit = () => {
     setDraft(String(value));
     setEditing(true);
-    setTimeout(() => inputRef.current?.select(), 0);
+    // Focus synchronously within the click handler — iOS requires this
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
   };
 
   const commit = () => {
@@ -272,14 +278,20 @@ const QtyInput: React.FC<{ value: number; onChange: (v: number) => void }> = ({ 
     return (
       <input
         ref={inputRef}
-        type="number"
+        type="text"
+        inputMode="decimal"
+        pattern="[0-9]*\.?[0-9]*"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        onKeyDown={(e) => e.key === 'Enter' && commit()}
-        step="0.5"
-        min="0.5"
-        className="w-14 text-center text-sm font-semibold text-gray-700 border border-[#efa93b] rounded-lg p-0.5 focus:outline-none focus:ring-1 focus:ring-[#efa93b]"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+          }
+        }}
+        className="w-14 text-center text-sm font-semibold text-gray-700 border border-[#efa93b] rounded-lg p-1 focus:outline-none focus:ring-1 focus:ring-[#efa93b]"
+        style={{ fontSize: '16px' }}
         autoFocus
       />
     );
@@ -289,6 +301,7 @@ const QtyInput: React.FC<{ value: number; onChange: (v: number) => void }> = ({ 
     <button
       onClick={startEdit}
       className="w-12 text-center text-sm font-semibold text-[#d0502a] underline decoration-dotted underline-offset-2"
+      style={{ minHeight: '32px' }}
     >
       {value}份
     </button>

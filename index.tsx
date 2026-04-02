@@ -2,6 +2,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { initLiff } from './services/liffService';
+
+// Initialize LIFF before rendering (non-blocking — app renders regardless)
+initLiff();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
