@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 80" fill="none">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#d0502a"/>
+      <stop offset="50%" stop-color="#dd6726"/>
+      <stop offset="100%" stop-color="#efa93b"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="8" width="28" height="64" rx="4" fill="#d0502a" opacity="0.9"/>
+  <rect x="20" y="8" width="28" height="64" rx="4" fill="#efa93b" opacity="0.85"/>
+  <circle cx="18" cy="28" r="10" fill="white"/>
+  <circle cx="34" cy="28" r="10" fill="white"/>
+  <circle cx="18" cy="52" r="10" fill="white"/>
+  <circle cx="34" cy="52" r="10" fill="white"/>
+  <text x="64" y="54" font-family="Georgia, 'Times New Roman', serif" font-size="42" font-weight="bold" fill="url(#g1)">BeBetter</text>
+</svg>
