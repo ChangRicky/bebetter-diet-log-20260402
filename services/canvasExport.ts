@@ -69,8 +69,8 @@ function fmtQty(qty: number): string {
   return `${qty}份`;
 }
 
-/** Draw elegant brand footer bar */
-function drawBrandFooter(ctx: CanvasRenderingContext2D, y: number, width: number, light: boolean) {
+/** Draw elegant brand footer bar with optional user name */
+function drawBrandFooter(ctx: CanvasRenderingContext2D, y: number, width: number, light: boolean, userName?: string | null) {
   const footerH = 56;
   // Gradient accent line
   const grad = ctx.createLinearGradient(0, y, width, y);
@@ -83,7 +83,7 @@ function drawBrandFooter(ctx: CanvasRenderingContext2D, y: number, width: number
   ctx.fillStyle = light ? '#FAFAFA' : 'rgba(255,255,255,0.05)';
   ctx.fillRect(0, y + 3, width, footerH);
 
-  // Brand text
+  // Brand text (left side)
   ctx.textBaseline = 'middle';
   const centerY = y + 3 + footerH / 2;
 
@@ -96,12 +96,20 @@ function drawBrandFooter(ctx: CanvasRenderingContext2D, y: number, width: number
   ctx.fillStyle = light ? '#9CA3AF' : 'rgba(255,255,255,0.4)';
   ctx.fillText(' — 陪你成為更好的自己', PAD + bw, centerY);
 
+  // User name (right side)
+  if (userName) {
+    ctx.font = `bold 22px "Noto Sans TC", sans-serif`;
+    ctx.fillStyle = light ? '#6B7280' : 'rgba(255,255,255,0.6)';
+    const nameW = ctx.measureText(userName).width;
+    ctx.fillText(userName, width - PAD - nameW, centerY);
+  }
+
   return footerH + 3;
 }
 
 // ─── Meal card ────────────────────────────────────────────────────────────────
 
-export async function composeMealCard(record: MealRecord): Promise<string> {
+export async function composeMealCard(record: MealRecord, userName?: string | null): Promise<string> {
   const img = await loadImage(record.imageDataUrl);
 
   // Support both portrait and landscape photos
@@ -218,7 +226,7 @@ export async function composeMealCard(record: MealRecord): Promise<string> {
 
   // Brand footer
   const footerY = totalHeight - brandFooterH;
-  drawBrandFooter(ctx, footerY, CARD_WIDTH, true);
+  drawBrandFooter(ctx, footerY, CARD_WIDTH, true, userName);
 
   return canvas.toDataURL('image/jpeg', 0.92);
 }
@@ -275,7 +283,7 @@ function drawItemChips(ctx: CanvasRenderingContext2D, items: FoodItem[], sx: num
 
 // ─── Behavior card (elegant dark theme, NO watermark) ────────────────────────
 
-export async function composeBehaviorCard(record: BehaviorRecord): Promise<string> {
+export async function composeBehaviorCard(record: BehaviorRecord, userName?: string | null): Promise<string> {
   const theme = CARD_THEMES.find(t => t.id === record.cardTheme) || CARD_THEMES[0];
   const BG = theme.bg;
   const TEXT = theme.text;
@@ -411,12 +419,18 @@ export async function composeBehaviorCard(record: BehaviorRecord): Promise<strin
   ctx.fillRect(PAD, y, CARD_WIDTH - PAD * 2, 2);
   y += 12;
 
-  // Bottom brand text
+  // Bottom brand text + user name
   ctx.textBaseline = 'top';
   ctx.font = `20px Georgia, "Times New Roman", serif`;
   ctx.fillStyle = BRAND_GOLD;
   ctx.globalAlpha = 0.6;
   ctx.fillText('BeBetter — 陪你成為更好的自己', PAD, y);
+  if (userName) {
+    ctx.font = `bold 22px "Noto Sans TC", sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    const nameW = ctx.measureText(userName).width;
+    ctx.fillText(userName, CARD_WIDTH - PAD - nameW, y);
+  }
   ctx.globalAlpha = 1;
   y += 36;
 

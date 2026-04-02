@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { composeMealCard, composeBehaviorCard } from '../../services/canvasExport';
+import { getLiffUserName } from '../../services/liffService';
 import type { AppRecord, MealRecord, BehaviorRecord } from '../../types';
 
 interface HistoryViewerProps {
@@ -66,7 +67,7 @@ const MealCard: React.FC<{ record: MealRecord }> = ({ record }) => {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const url = await composeMealCard(record);
+      const url = await composeMealCard(record, getLiffUserName());
       downloadImage(url, `BeBetter飲食紀錄-${date.toLocaleDateString('zh-TW')}.jpg`);
     } catch { /* ignore */ }
     setExporting(false);
@@ -123,7 +124,7 @@ const BehaviorCard: React.FC<{ record: BehaviorRecord }> = ({ record }) => {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const url = await composeBehaviorCard(record);
+      const url = await composeBehaviorCard(record, getLiffUserName());
       downloadImage(url, `BeBetter行為指標-${displayDate}.jpg`);
     } catch { /* ignore */ }
     setExporting(false);

@@ -3,6 +3,7 @@ import { SegmentedControl } from '../shared/SegmentedControl';
 import { SLEEP_LEVELS, SLEEP_QUALITIES, BOWEL_OPTIONS, WATER_PRESETS, CARD_THEMES, toDateString } from '../../constants';
 import { saveRecord } from '../../services/storage';
 import { composeBehaviorCard } from '../../services/canvasExport';
+import { getLiffUserName } from '../../services/liffService';
 import { ExportActions } from '../shared/ExportActions';
 import { saveBehaviorDraft, loadBehaviorDraft, clearBehaviorDraft } from '../../services/draftStorage';
 import type { BehaviorRecord, SleepLevel, SleepQuality, BowelCount } from '../../types';
@@ -72,7 +73,7 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
     };
     await saveRecord(record);
     clearBehaviorDraft();
-    const imageUrl = await composeBehaviorCard(record);
+    const imageUrl = await composeBehaviorCard(record, getLiffUserName());
     setCardImageUrl(imageUrl);
     setIsSubmitting(false);
     onRecordSaved();

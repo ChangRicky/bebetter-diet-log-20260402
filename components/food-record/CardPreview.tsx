@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { composeMealCard } from '../../services/canvasExport';
+import { getLiffUserName } from '../../services/liffService';
 import { ExportActions } from '../shared/ExportActions';
 import type { MealRecord } from '../../types';
 
@@ -15,7 +16,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ record, onNewRecord })
   useEffect(() => {
     let cancelled = false;
     setIsComposing(true);
-    composeMealCard(record).then((url) => {
+    composeMealCard(record, getLiffUserName()).then((url) => {
       if (!cancelled) {
         setCardImageUrl(url);
         setIsComposing(false);

@@ -5,6 +5,7 @@ const LIFF_ID = import.meta.env.VITE_LIFF_ID as string | undefined;
 /** Whether we're running inside LIFF (LINE in-app browser) */
 let _isInLiff = false;
 let _initPromise: Promise<void> | null = null;
+let _userName: string | null = null;
 
 /**
  * Initialize LIFF SDK. Safe to call multiple times — only runs once.
@@ -21,9 +22,17 @@ export function initLiff(): Promise<void> {
 
   _initPromise = liff
     .init({ liffId: LIFF_ID })
-    .then(() => {
+    .then(async () => {
       _isInLiff = liff.isInClient();
       console.info(`[LIFF] Initialized. In LINE client: ${_isInLiff}`);
+      // Auto-fetch user profile if logged in
+      if (liff.isLoggedIn()) {
+        try {
+          const profile = await liff.getProfile();
+          _userName = profile.displayName || null;
+          console.info(`[LIFF] User: ${_userName}`);
+        } catch { /* ignore */ }
+      }
     })
     .catch((err) => {
       console.warn('[LIFF] Init failed — running in normal browser mode', err);
@@ -50,6 +59,11 @@ export async function getLiffProfile() {
   } catch {
     return null;
   }
+}
+
+/** Get cached LINE display name (available after init) */
+export function getLiffUserName(): string | null {
+  return _userName;
 }
 
 /**
