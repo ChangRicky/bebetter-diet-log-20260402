@@ -64,26 +64,38 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    const now = new Date();
+    const record: BehaviorRecord = {
+      id: now.toISOString(),
+      type: 'behavior',
+      timestamp: now.getTime(),
+      recordDate,
+      waterMl, proteinCups, proteinGrams,
+      exercise, exerciseNote, exerciseDuration,
+      stepsCount, sleep, sleepQuality, bedtime: bedtime || '',
+      bowel, bowelNote: bowelNote || '', supplements: supplements || '', generalNote, cardTheme,
+    };
+
+    // Step 1: save record
     try {
-      const now = new Date();
-      const record: BehaviorRecord = {
-        id: now.toISOString(),
-        type: 'behavior',
-        timestamp: now.getTime(),
-        recordDate,
-        waterMl, proteinCups, proteinGrams,
-        exercise, exerciseNote, exerciseDuration,
-        stepsCount, sleep, sleepQuality, bedtime: bedtime || '',
-        bowel, bowelNote: bowelNote || '', supplements: supplements || '', generalNote, cardTheme,
-      };
       await saveRecord(record);
       clearBehaviorDraft();
-      const imageUrl = await composeBehaviorCard(record, getLiffUserName());
-      setCardImageUrl(imageUrl);
       onRecordSaved();
     } catch (err) {
-      console.error('Submit failed:', err);
+      console.error('Save failed:', err);
       alert('儲存失敗，請再試一次');
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Step 2: generate card image (non-blocking — record is already saved)
+    try {
+      const imageUrl = await composeBehaviorCard(record, getLiffUserName());
+      setCardImageUrl(imageUrl);
+    } catch (err) {
+      console.error('Card generation failed:', err);
+      // Record saved successfully, just skip preview
+      setCardImageUrl('error');
     }
     setIsSubmitting(false);
   };
@@ -99,17 +111,22 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
   };
 
   if (cardImageUrl) {
+    const hasValidImage = cardImageUrl !== 'error';
     return (
       <div className="max-w-lg mx-auto px-4 pb-6">
-        <h2 className="text-xl font-bold text-gray-800 text-center mb-2">行為指標紀錄卡</h2>
+        <h2 className="text-xl font-bold text-gray-800 text-center mb-2">
+          {hasValidImage ? '行為指標紀錄卡' : '紀錄已儲存！'}
+        </h2>
         <p className="text-center text-sm text-gray-400 mb-4">
-          分享到限動，讓大家看到你的堅持與成長
+          {hasValidImage ? '分享到限動，讓大家看到你的堅持與成長' : '圖片產生失敗，但紀錄已成功儲存'}
         </p>
-        <div className="rounded-xl overflow-hidden shadow-lg mb-4">
-          <img src={cardImageUrl} alt="行為指標" className="w-full" />
-        </div>
+        {hasValidImage && (
+          <div className="rounded-xl overflow-hidden shadow-lg mb-4">
+            <img src={cardImageUrl} alt="行為指標" className="w-full" />
+          </div>
+        )}
         <ExportActions
-          imageDataUrl={cardImageUrl}
+          imageDataUrl={hasValidImage ? cardImageUrl : null}
           fileName={`BeBetter行為指標-${recordDate}.jpg`}
           onNewRecord={reset}
         />

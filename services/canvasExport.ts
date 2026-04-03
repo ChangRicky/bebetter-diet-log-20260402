@@ -5,7 +5,8 @@ const CARD_WIDTH = 1080;
 const PAD = 48;
 const BRAND_FONT_SIZE = 28;
 const TITLE_FONT_SIZE = 34;
-const ITEM_FONT_SIZE = 34;
+const CHIP_FONT_SIZE = 34;    // meal card chip text (enlarged for nutritionist readability)
+const BEHAVIOR_FONT_SIZE = 28; // behavior card row text
 const NOTE_FONT_SIZE = 24;
 const LINE_HEIGHT = 1.6;
 const CHIP_PADDING_H = 24;
@@ -125,10 +126,10 @@ export async function composeMealCard(record: MealRecord, userName?: string | nu
 
   // Pre-compute chip layout for multi-tag items
   const safeItems = Array.isArray(record.items) ? record.items.filter(i => i.name && Array.isArray(i.tags)) : [];
-  tempCtx.font = `${ITEM_FONT_SIZE}px "Noto Sans TC", sans-serif`;
+  tempCtx.font = `${CHIP_FONT_SIZE}px "Noto Sans TC", sans-serif`;
   const chipRows = layoutItemChips(tempCtx, safeItems, CARD_WIDTH - PAD * 2);
   const chipSectionH = chipRows.length > 0
-    ? chipRows.length * (ITEM_FONT_SIZE + CHIP_PADDING_V * 2 + CHIP_GAP) - CHIP_GAP
+    ? chipRows.length * (CHIP_FONT_SIZE + CHIP_PADDING_V * 2 + CHIP_GAP) - CHIP_GAP
     : 0;
 
   let noteSectionH = 0;
@@ -209,7 +210,7 @@ export async function composeMealCard(record: MealRecord, userName?: string | nu
 
   // Food item chips
   if (safeItems.length > 0) {
-    ctx.font = `${ITEM_FONT_SIZE}px "Noto Sans TC", sans-serif`;
+    ctx.font = `${CHIP_FONT_SIZE}px "Noto Sans TC", sans-serif`;
     y = drawItemChips(ctx, safeItems, PAD, y, CARD_WIDTH - PAD * 2);
     y += 16;
   }
@@ -237,7 +238,7 @@ function layoutItemChips(ctx: CanvasRenderingContext2D, items: FoodItem[], maxWi
   const rows: ChipLayout[][] = [];
   let curRow: ChipLayout[] = [];
   let rowX = 0, rowY = 0;
-  const chipH = ITEM_FONT_SIZE + CHIP_PADDING_V * 2;
+  const chipH = CHIP_FONT_SIZE + CHIP_PADDING_V * 2;
 
   for (const item of items) {
     const tagParts = sortTags(item.tags).map(t => `${t.tag}${fmtQty(t.qty)}`).join(' ');
@@ -297,8 +298,9 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
 
   const canvas = document.createElement('canvas');
   canvas.width = CARD_WIDTH;
-  canvas.height = estH + 200; // extra buffer
-  const ctx = canvas.getContext('2d')!;
+  canvas.height = estH + 300; // generous buffer
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D context not available');;
 
   // Background
   ctx.fillStyle = BG;
@@ -383,7 +385,7 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
     ctx.fill();
 
     const centerY = y + (ROW_HEIGHT - 8) / 2;
-    ctx.font = `${ITEM_FONT_SIZE}px "Noto Sans TC", sans-serif`;
+    ctx.font = `${BEHAVIOR_FONT_SIZE}px "Noto Sans TC", sans-serif`;
     ctx.fillStyle = TEXT;
     ctx.textBaseline = 'middle';
     ctx.fillText(`${row.icon}  ${row.label}`, PAD + 16, centerY);
@@ -391,7 +393,7 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
     const valText = row.value ?? '—';
     const valColor = row.value === null ? MUTED : indicatorColorDark(row.value);
     ctx.fillStyle = valColor;
-    ctx.font = `bold ${ITEM_FONT_SIZE}px "Noto Sans TC", sans-serif`;
+    ctx.font = `bold ${BEHAVIOR_FONT_SIZE}px "Noto Sans TC", sans-serif`;
     const valW = ctx.measureText(valText).width;
     ctx.fillText(valText, CARD_WIDTH - PAD - 16 - valW, centerY);
 
@@ -446,8 +448,9 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
   const finalCanvas = document.createElement('canvas');
   finalCanvas.width = CARD_WIDTH;
   finalCanvas.height = y;
-  const fctx = finalCanvas.getContext('2d')!;
-  fctx.drawImage(canvas, 0, 0);
+  const fctx = finalCanvas.getContext('2d');
+  if (!fctx) throw new Error('Canvas 2D context not available');
+  fctx.drawImage(canvas, 0, 0, CARD_WIDTH, y, 0, 0, CARD_WIDTH, y);
 
   return finalCanvas.toDataURL('image/jpeg', 0.92);
 }

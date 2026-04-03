@@ -237,89 +237,129 @@ const BehaviorCard: React.FC<{ record: BehaviorRecord; onDuplicate?: () => void 
 const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 
 interface WeekData {
-  weekNum: number;        // 0 = practice week, 1+ = official
+  weekNum: number;        // 0 = unassigned, 1+ = official within a period
   startDate: Date;
   endDate: Date;
   records: AppRecord[];
   mealCount: number;
   behaviorCount: number;
   isPractice: boolean;
+  periodId?: string;      // which course period this week belongs to
+  periodLabel?: string;
 }
 
-const COURSE_START_KEY = 'bebetter_course_start';
-const COURSE_PLAN_KEY = 'bebetter_course_plan';
+const COURSE_PERIODS_KEY = 'bebetter_course_periods';
 
-type CoursePlan = 'standard' | 'premium' | 'loop_full' | 'loop_lite';
+type CoursePlanId = 'standard' | 'premium' | 'loop_full' | 'loop_lite';
 
-const COURSE_PLANS: { id: CoursePlan; label: string; weeks: number; desc: string }[] = [
-  { id: 'standard', label: 'Standard 標準版', weeks: 8, desc: '8 週基礎課程' },
-  { id: 'premium', label: 'Premium 高級版', weeks: 10, desc: '10 週進階課程' },
-  { id: 'loop_full', label: 'Loop Full 延伸', weeks: 8, desc: '高級版延伸 8 週' },
-  { id: 'loop_lite', label: 'Loop Lite 延伸', weeks: 8, desc: '標準版延伸 8 週' },
+const COURSE_PLANS: { id: CoursePlanId; label: string; weeks: number; desc: string; isMain: boolean }[] = [
+  { id: 'standard', label: 'Standard 標準版', weeks: 8, desc: '8 週基礎課程', isMain: true },
+  { id: 'premium', label: 'Premium 高級版', weeks: 10, desc: '10 週進階課程', isMain: true },
+  { id: 'loop_full', label: 'Loop Full 延伸', weeks: 8, desc: '高級版延伸 8 週', isMain: false },
+  { id: 'loop_lite', label: 'Loop Lite 延伸', weeks: 8, desc: '標準版延伸 8 週', isMain: false },
 ];
 
-function getCourseStart(): string | null {
-  return localStorage.getItem(COURSE_START_KEY);
+interface CoursePeriod {
+  id: string;         // unique id (timestamp)
+  planId: CoursePlanId;
+  startDate: string;  // YYYY-MM-DD
+  weeks: number;
+  label: string;
 }
 
-function getCoursePlan(): CoursePlan | null {
-  return localStorage.getItem(COURSE_PLAN_KEY) as CoursePlan | null;
+function loadPeriods(): CoursePeriod[] {
+  try {
+    const raw = localStorage.getItem(COURSE_PERIODS_KEY);
+    if (!raw) {
+      // Migrate from old single-period format
+      const oldStart = localStorage.getItem('bebetter_course_start');
+      const oldPlan = localStorage.getItem('bebetter_course_plan') as CoursePlanId | null;
+      if (oldStart && oldPlan) {
+        const plan = COURSE_PLANS.find(p => p.id === oldPlan);
+        const periods: CoursePeriod[] = [{
+          id: Date.now().toString(),
+          planId: oldPlan,
+          startDate: oldStart,
+          weeks: plan?.weeks ?? 8,
+          label: plan?.label ?? oldPlan,
+        }];
+        savePeriods(periods);
+        localStorage.removeItem('bebetter_course_start');
+        localStorage.removeItem('bebetter_course_plan');
+        return periods;
+      }
+      return [];
+    }
+    return JSON.parse(raw);
+  } catch { return []; }
 }
 
-function setCourseStart(dateStr: string | null) {
-  if (dateStr) localStorage.setItem(COURSE_START_KEY, dateStr);
-  else localStorage.removeItem(COURSE_START_KEY);
+function savePeriods(periods: CoursePeriod[]) {
+  localStorage.setItem(COURSE_PERIODS_KEY, JSON.stringify(periods));
 }
 
-function setCoursePlan(plan: CoursePlan | null) {
-  if (plan) localStorage.setItem(COURSE_PLAN_KEY, plan);
-  else localStorage.removeItem(COURSE_PLAN_KEY);
+function toMonday(d: Date): Date {
+  const m = new Date(d);
+  m.setHours(0, 0, 0, 0);
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+  return m;
 }
 
-function buildWeeks(records: AppRecord[], courseStart: string | null): WeekData[] {
-  if (records.length === 0) return [];
-  const sorted = [...records].sort((a, b) => a.timestamp - b.timestamp);
+function buildWeeks(records: AppRecord[], periods: CoursePeriod[]): WeekData[] {
   const weekMs = 7 * 24 * 60 * 60 * 1000;
   const now = new Date();
 
-  // Determine the Monday of the official start week
-  let officialMon: Date;
-  if (courseStart) {
-    const cs = new Date(courseStart + 'T00:00:00');
-    const dow = cs.getDay();
-    officialMon = new Date(cs);
-    officialMon.setDate(officialMon.getDate() - ((dow + 6) % 7));
-  } else {
-    // Fall back to first record's week
-    const first = new Date(sorted[0].timestamp);
-    first.setHours(0, 0, 0, 0);
-    const dow = first.getDay();
-    officialMon = new Date(first);
-    officialMon.setDate(officialMon.getDate() - ((dow + 6) % 7));
-  }
+  // Build period ranges (start Monday → end Monday)
+  const periodRanges = periods.map(p => {
+    const startMon = toMonday(new Date(p.startDate + 'T00:00:00'));
+    const endTime = startMon.getTime() + p.weeks * weekMs;
+    return { ...p, startMon, endTime };
+  });
 
-  // Find the earliest record's Monday
-  const firstRec = new Date(sorted[0].timestamp);
-  firstRec.setHours(0, 0, 0, 0);
-  const fd = firstRec.getDay();
-  const firstRecMon = new Date(firstRec);
-  firstRecMon.setDate(firstRecMon.getDate() - ((fd + 6) % 7));
+  // Find earliest Monday across records and periods
+  const sorted = records.length > 0 ? [...records].sort((a, b) => a.timestamp - b.timestamp) : [];
+  const firstRecMon = sorted.length > 0 ? toMonday(new Date(sorted[0].timestamp)) : null;
+  const firstPeriodMon = periodRanges.length > 0
+    ? new Date(Math.min(...periodRanges.map(p => p.startMon.getTime())))
+    : null;
 
-  const earliestMon = firstRecMon < officialMon ? firstRecMon : officialMon;
+  // Need at least one anchor point
+  if (!firstRecMon && !firstPeriodMon) return [];
 
-  const total = Math.min(Math.ceil((now.getTime() - earliestMon.getTime()) / weekMs), 30);
+  const earliestMon = firstRecMon && firstPeriodMon
+    ? (firstRecMon < firstPeriodMon ? firstRecMon : firstPeriodMon)
+    : (firstRecMon || firstPeriodMon!);
+
+  // Also consider latest period end to ensure all period weeks are shown
+  const latestEnd = periodRanges.length > 0
+    ? Math.max(...periodRanges.map(p => p.endTime))
+    : now.getTime();
+  const upperBound = Math.min(Math.max(now.getTime(), latestEnd), earliestMon.getTime() + 52 * weekMs);
+
+  const total = Math.max(1, Math.ceil((upperBound - earliestMon.getTime()) / weekMs));
 
   const weeks: WeekData[] = [];
   for (let i = 0; i < total; i++) {
     const s = new Date(earliestMon.getTime() + i * weekMs);
     const e = new Date(s.getTime() + weekMs);
     const wr = records.filter(r => r.timestamp >= s.getTime() && r.timestamp < e.getTime());
-    const isPractice = s.getTime() < officialMon.getTime();
-    const weekNum = isPractice ? 0 : Math.round((s.getTime() - officialMon.getTime()) / weekMs) + 1;
+
+    // Find which period this week belongs to
+    const period = periodRanges.find(p =>
+      s.getTime() >= p.startMon.getTime() && s.getTime() < p.endTime
+    );
+
+    const isPractice = !period;
+    const weekNum = period
+      ? Math.round((s.getTime() - period.startMon.getTime()) / weekMs) + 1
+      : 0;
+
     weeks.push({
       weekNum, startDate: s, endDate: e, records: wr, isPractice,
       mealCount: wr.filter(r => r.type === 'meal').length,
       behaviorCount: wr.filter(r => r.type === 'behavior').length,
+      periodId: period?.id,
+      periodLabel: period?.label,
     });
   }
   return weeks;
@@ -338,25 +378,60 @@ function groupByDate(records: AppRecord[]): Map<string, AppRecord[]> {
 }
 
 const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
-  const [courseStart, setCourseStartState] = useState<string | null>(getCourseStart);
-  const [coursePlan, setCoursePlanState] = useState<CoursePlan | null>(getCoursePlan);
+  const [periods, setPeriodsState] = useState<CoursePeriod[]>(loadPeriods);
   const [showSettings, setShowSettings] = useState(false);
-  const weeks = buildWeeks(records, courseStart);
+  const [addingPeriod, setAddingPeriod] = useState(false);
+  const [newPlanId, setNewPlanId] = useState<CoursePlanId | null>(null);
+  const [newStartDate, setNewStartDate] = useState('');
+  const weeks = buildWeeks(records, periods);
   const officialWeeks = weeks.filter(w => !w.isPractice);
-  const practiceWeeks = weeks.filter(w => w.isPractice);
-  const [expandedWeek, setExpandedWeek] = useState<number | null>(weeks.length > 0 ? weeks[weeks.length - 1].weekNum : null);
-  const [exportingWeek, setExportingWeek] = useState<number | null>(null);
-  const [exportingProgram, setExportingProgram] = useState(false);
+  const [expandedKey, setExpandedKey] = useState<string | null>(() => {
+    if (weeks.length === 0) return null;
+    const last = weeks[weeks.length - 1];
+    return `${last.periodId || 'p'}-${last.weekNum}`;
+  });
+  const [exportingWeek, setExportingWeek] = useState<string | null>(null);
+  const [exportingProgram, setExportingProgram] = useState<string | null>(null);
   const totalMeals = records.filter(r => r.type === 'meal').length;
   const totalBehaviors = records.filter(r => r.type === 'behavior').length;
   const streakWeeks = weeks.filter(w => w.records.length > 0).length;
   const userName = getLiffUserName();
 
+  const addPeriod = () => {
+    if (!newPlanId || !newStartDate) return;
+    const plan = COURSE_PLANS.find(p => p.id === newPlanId);
+    if (!plan) return;
+    const newPeriod: CoursePeriod = {
+      id: Date.now().toString(),
+      planId: newPlanId,
+      startDate: newStartDate,
+      weeks: plan.weeks,
+      label: plan.label,
+    };
+    const updated = [...periods, newPeriod].sort((a, b) => a.startDate.localeCompare(b.startDate));
+    savePeriods(updated);
+    setPeriodsState(updated);
+    setNewPlanId(null);
+    setNewStartDate('');
+    setAddingPeriod(false);
+  };
+
+  const removePeriod = (id: string) => {
+    const updated = periods.filter(p => p.id !== id);
+    savePeriods(updated);
+    setPeriodsState(updated);
+  };
+
+  const weekKey = (w: WeekData) => {
+    const dateStr = `${w.startDate.getFullYear()}${String(w.startDate.getMonth() + 1).padStart(2, '0')}${String(w.startDate.getDate()).padStart(2, '0')}`;
+    return w.isPractice ? `practice-${dateStr}` : `${w.periodId}-W${w.weekNum}`;
+  };
+
   const handleExportWeek = async (week: WeekData) => {
-    setExportingWeek(week.weekNum);
+    const key = weekKey(week);
+    setExportingWeek(key);
     try {
       const behaviors = week.records.filter(r => r.type === 'behavior') as BehaviorRecord[];
-      // Calculate meal counts per day (Mon-Sun)
       const mealCounts = Array(7).fill(0);
       for (const r of week.records) {
         if (r.type !== 'meal') continue;
@@ -379,10 +454,11 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
     setExportingWeek(null);
   };
 
-  const handleExportProgram = async () => {
-    setExportingProgram(true);
+  const handleExportPeriod = async (period: CoursePeriod) => {
+    setExportingProgram(period.id);
     try {
-      const weekData = weeks.map(w => {
+      const periodWeeks = weeks.filter(w => w.periodId === period.id);
+      const weekData = periodWeeks.map(w => {
         const behaviors = w.records.filter(r => r.type === 'behavior') as BehaviorRecord[];
         const waterVals = behaviors.filter(b => b.waterMl != null).map(b => b.waterMl!);
         return {
@@ -398,10 +474,10 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
           })).size,
         };
       });
-      const url = await composeProgramSummary({ weeks: weekData, totalWeeks: officialWeeks.length, userName });
-      downloadImage(url, `BeBetter-${officialWeeks.length}週總覽.jpg`);
+      const url = await composeProgramSummary({ weeks: weekData, totalWeeks: period.weeks, userName });
+      downloadImage(url, `BeBetter-${period.label}-${period.weeks}週總覽.jpg`);
     } catch { /* ignore */ }
-    setExportingProgram(false);
+    setExportingProgram(null);
   };
 
   if (records.length === 0) {
@@ -443,12 +519,12 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
         </p>
       </div>
 
-      {/* Course settings */}
+      {/* Course periods management */}
       <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100">
         <div className="flex items-center justify-between">
           <div className="text-sm text-gray-600">
-            {coursePlan && courseStart
-              ? `📅 ${COURSE_PLANS.find(p => p.id === coursePlan)?.label} · ${courseStart} 起`
+            {periods.length > 0
+              ? `📅 ${periods.length} 個課程期間`
               : '📅 尚未設定課程方案'}
           </div>
           <button
@@ -460,107 +536,134 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
         </div>
         {showSettings && (
           <div className="mt-3 pt-3 border-t border-gray-100 flex flex-col gap-3">
-            {/* Plan selector */}
-            <div>
-              <p className="text-xs text-gray-500 font-medium mb-2">課程方案</p>
-              <div className="grid grid-cols-2 gap-2">
-                {COURSE_PLANS.map((plan) => (
-                  <button
-                    key={plan.id}
-                    onClick={() => { setCoursePlan(plan.id); setCoursePlanState(plan.id); }}
-                    className={`p-2.5 rounded-xl text-left transition-all border ${
-                      coursePlan === plan.id
-                        ? 'border-[#d0502a] bg-[#FFF3E8]'
-                        : 'border-gray-200 bg-white active:bg-gray-50'
-                    }`}
-                  >
-                    <p className={`text-xs font-bold ${coursePlan === plan.id ? 'text-[#d0502a]' : 'text-gray-700'}`}>
-                      {plan.label}
-                    </p>
-                    <p className="text-xs text-gray-400">{plan.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Existing periods */}
+            {periods.map((p) => {
+              const plan = COURSE_PLANS.find(c => c.id === p.planId);
+              const endD = new Date(p.startDate + 'T00:00:00');
+              endD.setDate(endD.getDate() + p.weeks * 7 - 1);
+              const periodWeeks = weeks.filter(w => w.periodId === p.id);
+              return (
+                <div key={p.id} className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-gray-700">{p.label}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {p.startDate} ~ {endD.getFullYear()}/{endD.getMonth() + 1}/{endD.getDate()}（{p.weeks} 週）
+                      </p>
+                      {plan && !plan.isMain && (
+                        <span className="inline-block mt-1 text-[10px] bg-[#efa93b]/20 text-[#c05828] px-1.5 py-0.5 rounded">延伸課程</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => removePeriod(p.id)}
+                      className="text-xs text-gray-400 px-2 py-1 rounded-lg active:bg-gray-200"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {/* Per-period export button */}
+                  {periodWeeks.length >= 2 && (
+                    <button
+                      onClick={() => handleExportPeriod(p)}
+                      disabled={exportingProgram === p.id}
+                      className="w-full mt-2 py-2 text-xs font-semibold text-white rounded-lg disabled:opacity-50"
+                      style={{ background: 'linear-gradient(135deg, #d0502a, #efa93b)' }}
+                    >
+                      {exportingProgram === p.id ? '匯出中...' : `📤 匯出 ${p.label} 總覽（${periodWeeks.length} 週）`}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
 
-            {/* Start date */}
-            <div>
-              <p className="text-xs text-gray-500 font-medium mb-2">
-                課程起始日{coursePlan ? ` · ${COURSE_PLANS.find(p => p.id === coursePlan)?.weeks} 週` : ''}
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={courseStart || ''}
-                  onChange={(e) => {
-                    const val = e.target.value || null;
-                    setCourseStart(val);
-                    setCourseStartState(val);
-                  }}
-                  className="flex-1 p-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
-                />
-                {(courseStart || coursePlan) && (
-                  <button
-                    onClick={() => {
-                      setCourseStart(null); setCourseStartState(null);
-                      setCoursePlan(null); setCoursePlanState(null);
-                    }}
-                    className="text-xs text-gray-500 px-3 py-2 rounded-lg bg-gray-100"
-                  >
-                    清除
-                  </button>
-                )}
-              </div>
-              {courseStart && coursePlan && (() => {
-                const plan = COURSE_PLANS.find(p => p.id === coursePlan);
-                if (!plan) return null;
-                const end = new Date(courseStart + 'T00:00:00');
-                end.setDate(end.getDate() + plan.weeks * 7 - 1);
-                return (
-                  <p className="text-xs text-gray-400 mt-1.5">
-                    課程結束日：{end.getFullYear()}/{end.getMonth() + 1}/{end.getDate()}（共 {plan.weeks} 週）
+            {/* Add new period */}
+            {!addingPeriod ? (
+              <button
+                onClick={() => setAddingPeriod(true)}
+                className="w-full py-2.5 text-sm font-medium text-[#d0502a] border-2 border-dashed border-[#efa93b]/40 rounded-xl active:bg-[#FFF8F0]"
+              >
+                + 新增課程
+              </button>
+            ) : (
+              <div className="bg-[#FFF8F0] rounded-xl p-3 border border-[#efa93b]/30 flex flex-col gap-3">
+                <p className="text-xs text-gray-500 font-medium">選擇方案</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {COURSE_PLANS.map((plan) => (
+                    <button
+                      key={plan.id}
+                      onClick={() => setNewPlanId(plan.id)}
+                      className={`p-2.5 rounded-xl text-left transition-all border ${
+                        newPlanId === plan.id
+                          ? 'border-[#d0502a] bg-[#FFF3E8]'
+                          : 'border-gray-200 bg-white active:bg-gray-50'
+                      }`}
+                    >
+                      <p className={`text-xs font-bold ${newPlanId === plan.id ? 'text-[#d0502a]' : 'text-gray-700'}`}>
+                        {plan.label}
+                      </p>
+                      <p className="text-xs text-gray-400">{plan.desc}</p>
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-2">
+                    課程起始日{newPlanId ? ` · ${COURSE_PLANS.find(p => p.id === newPlanId)?.weeks} 週` : ''}
                   </p>
-                );
-              })()}
-            </div>
+                  <input
+                    type="date"
+                    value={newStartDate}
+                    onChange={(e) => setNewStartDate(e.target.value)}
+                    className="w-full p-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setAddingPeriod(false); setNewPlanId(null); setNewStartDate(''); }}
+                    className="flex-1 py-2 text-xs text-gray-500 rounded-lg bg-gray-100 active:bg-gray-200"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={addPeriod}
+                    disabled={!newPlanId || !newStartDate}
+                    className="flex-1 py-2 text-xs font-bold text-white rounded-lg bg-[#d0502a] disabled:opacity-40 active:opacity-85"
+                  >
+                    確認新增
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Export program summary button */}
-      {officialWeeks.length >= 2 && (
-        <button
-          onClick={handleExportProgram}
-          disabled={exportingProgram}
-          className="w-full py-3 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
-          style={{ background: 'linear-gradient(135deg, #d0502a, #efa93b)' }}
-        >
-          {exportingProgram ? '匯出中...' : `📤 匯出整期總覽（${officialWeeks.length} 週）`}
-        </button>
-      )}
-
       {/* Expandable weekly archive — latest first */}
-      {[...weeks].reverse().map((week, idx) => {
-        const weekKey = week.isPractice ? `practice-${idx}` : `w${week.weekNum}`;
-        const isOpen = expandedWeek === week.weekNum && (!week.isPractice || expandedWeek === 0);
+      {[...weeks].reverse().map((week) => {
+        const wk = weekKey(week);
+        const isOpen = expandedKey === wk;
         const fmtDate = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
         const dailyMap = groupByDate(week.records);
-        const weekLabel = week.isPractice ? '練習' : `W${week.weekNum}`;
+        const weekLabel = week.isPractice
+          ? '練習'
+          : `${week.periodLabel ? week.periodLabel.split(' ')[0] + ' ' : ''}W${week.weekNum}`;
 
         return (
-          <div key={weekKey} className={`bg-white rounded-xl shadow-sm border overflow-hidden ${week.isPractice ? 'border-gray-200 opacity-80' : 'border-gray-100'}`}>
+          <div key={wk} className={`bg-white rounded-xl shadow-sm border overflow-hidden ${week.isPractice ? 'border-gray-200 opacity-80' : 'border-gray-100'}`}>
             {/* Week header — clickable */}
             <button
-              onClick={() => setExpandedWeek(isOpen ? null : week.weekNum)}
+              onClick={() => setExpandedKey(isOpen ? null : wk)}
               className="w-full flex items-center justify-between p-3 active:bg-gray-50"
             >
               <div className="flex items-center gap-2">
                 <span className={`text-white text-xs font-bold px-2 py-0.5 rounded-full ${week.isPractice ? 'bg-gray-400' : 'bg-[#d0502a]'}`}>
-                  {weekLabel}
+                  {week.isPractice ? '練習' : `W${week.weekNum}`}
                 </span>
                 <span className="text-sm font-medium text-gray-700">
                   {fmtDate(week.startDate)} ~ {fmtDate(new Date(week.endDate.getTime() - 86400000))}
                 </span>
+                {week.periodLabel && !week.isPractice && (
+                  <span className="text-[10px] text-gray-400">{week.periodLabel.split(' ')[0]}</span>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-400">
@@ -601,10 +704,10 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
                     {!week.isPractice && (
                       <button
                         onClick={() => handleExportWeek(week)}
-                        disabled={exportingWeek === week.weekNum}
+                        disabled={exportingWeek === wk}
                         className="w-full mt-1 py-2.5 text-sm font-semibold text-[#d0502a] bg-[#FFF3E8] rounded-lg active:bg-[#FFE8D6] disabled:opacity-50"
                       >
-                        {exportingWeek === week.weekNum ? '匯出中...' : `📤 匯出 W${week.weekNum} 週報`}
+                        {exportingWeek === wk ? '匯出中...' : `📤 匯出 W${week.weekNum} 週報`}
                       </button>
                     )}
                   </div>

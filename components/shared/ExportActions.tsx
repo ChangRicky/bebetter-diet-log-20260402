@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { isInLiff, isLiffEnabled, shareToLine, closeLiff } from '../../services/liffService';
 
 interface ExportActionsProps {
-  imageDataUrl: string;
+  imageDataUrl: string | null;
   fileName: string;
   onNewRecord: () => void;
 }
@@ -124,22 +124,24 @@ export const ExportActions: React.FC<ExportActionsProps> = ({
 
   return (
     <>
-      {/* Guidance text */}
-      <div className="bg-[#FFF8F0] rounded-xl p-3 mb-3 border border-[#efa93b]/20">
-        <p className="text-xs text-[#d0502a] leading-relaxed">
-          <span className="font-semibold">持續記錄，就是最好的改變。</span>
-          <br />分享到 IG 限動或 LINE 相簿，讓大家看到你正在努力成長！研究顯示，公開記錄飲食的人減脂成功率提升 2 倍以上。
-        </p>
-      </div>
+      {imageDataUrl && (
+        <>
+        {/* Guidance text */}
+        <div className="bg-[#FFF8F0] rounded-xl p-3 mb-3 border border-[#efa93b]/20">
+          <p className="text-xs text-[#d0502a] leading-relaxed">
+            <span className="font-semibold">持續記錄，就是最好的改變。</span>
+            <br />分享到 IG 限動或 LINE 相簿，讓大家看到你正在努力成長！研究顯示，公開記錄飲食的人減脂成功率提升 2 倍以上。
+          </p>
+        </div>
 
-      {/* Album reminder */}
-      <div className="bg-green-50 rounded-xl p-3 mb-3 border border-green-200/50">
-        <p className="text-xs text-green-700 leading-relaxed">
-          <span className="font-semibold">📌 小提醒：</span>傳到 LINE 之後，記得把圖片<span className="font-semibold">加入群組相簿</span>，這樣營養師才能方便查看你的紀錄喔！
-        </p>
-      </div>
+        {/* Album reminder */}
+        <div className="bg-green-50 rounded-xl p-3 mb-3 border border-green-200/50">
+          <p className="text-xs text-green-700 leading-relaxed">
+            <span className="font-semibold">📌 小提醒：</span>傳到 LINE 之後，記得把圖片<span className="font-semibold">加入群組相簿</span>，這樣營養師才能方便查看你的紀錄喔！
+          </p>
+        </div>
 
-      <div className="flex gap-3">
+        <div className="flex gap-3">
         <button
           onClick={handleDownload}
           className="flex-1 flex flex-col items-center justify-center gap-1 bg-[#d0502a] text-white text-base font-semibold py-3.5 rounded-xl active:opacity-85 transition-opacity"
@@ -189,6 +191,8 @@ export const ExportActions: React.FC<ExportActionsProps> = ({
         >
           📤 分享到其他 App
         </button>
+      )}
+        </>
       )}
 
       <button
