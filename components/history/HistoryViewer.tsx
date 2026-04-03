@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { composeMealCard, composeBehaviorCard } from '../../services/canvasExport';
+import { composeMealCard, composeBehaviorCard, composeWeeklyReport, composeProgramSummary } from '../../services/canvasExport';
 import { getLiffUserName } from '../../services/liffService';
 import { saveMealDraft, setDuplicatedImage } from '../../services/draftStorage';
 import type { AppRecord, MealRecord, BehaviorRecord } from '../../types';
@@ -250,9 +250,62 @@ function groupByDate(records: AppRecord[]): Map<string, AppRecord[]> {
 const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
   const weeks = buildWeeks(records);
   const [expandedWeek, setExpandedWeek] = useState<number | null>(weeks.length > 0 ? weeks[weeks.length - 1].weekNum : null);
+  const [exportingWeek, setExportingWeek] = useState<number | null>(null);
+  const [exportingProgram, setExportingProgram] = useState(false);
   const totalMeals = records.filter(r => r.type === 'meal').length;
   const totalBehaviors = records.filter(r => r.type === 'behavior').length;
   const streakWeeks = weeks.filter(w => w.records.length > 0).length;
+  const userName = getLiffUserName();
+
+  const handleExportWeek = async (week: WeekData) => {
+    setExportingWeek(week.weekNum);
+    try {
+      const behaviors = week.records.filter(r => r.type === 'behavior') as BehaviorRecord[];
+      // Calculate meal counts per day (Mon-Sun)
+      const mealCounts = Array(7).fill(0);
+      for (const r of week.records) {
+        if (r.type !== 'meal') continue;
+        const d = new Date(r.timestamp);
+        const dayIdx = (d.getDay() + 6) % 7;
+        mealCounts[dayIdx]++;
+      }
+      const url = await composeWeeklyReport({
+        weekNum: week.weekNum,
+        startDate: week.startDate,
+        endDate: week.endDate,
+        behaviorRecords: behaviors,
+        mealCounts,
+        userName,
+      });
+      downloadImage(url, `BeBetter-W${week.weekNum}週報.jpg`);
+    } catch { /* ignore */ }
+    setExportingWeek(null);
+  };
+
+  const handleExportProgram = async () => {
+    setExportingProgram(true);
+    try {
+      const weekData = weeks.map(w => {
+        const behaviors = w.records.filter(r => r.type === 'behavior') as BehaviorRecord[];
+        const waterVals = behaviors.filter(b => b.waterMl != null).map(b => b.waterMl!);
+        return {
+          weekNum: w.weekNum,
+          startDate: w.startDate,
+          avgWater: waterVals.length > 0 ? Math.round(waterVals.reduce((a, b) => a + b, 0) / waterVals.length) : null,
+          exerciseDays: behaviors.filter(b => b.exercise === true).length,
+          mealCount: w.mealCount,
+          behaviorCount: w.behaviorCount,
+          recordDays: new Set(w.records.map(r => {
+            const d = new Date(r.timestamp);
+            return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+          })).size,
+        };
+      });
+      const url = await composeProgramSummary({ weeks: weekData, totalWeeks: weeks.length, userName });
+      downloadImage(url, `BeBetter-${weeks.length}週總覽.jpg`);
+    } catch { /* ignore */ }
+    setExportingProgram(false);
+  };
 
   if (records.length === 0) {
     return (
@@ -292,6 +345,18 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
             : '✨ 第一步最重要，持續記錄就對了！'}
         </p>
       </div>
+
+      {/* Export program summary button */}
+      {weeks.length >= 2 && (
+        <button
+          onClick={handleExportProgram}
+          disabled={exportingProgram}
+          className="w-full py-3 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+          style={{ background: 'linear-gradient(135deg, #d0502a, #efa93b)' }}
+        >
+          {exportingProgram ? '匯出中...' : `📤 匯出整期總覽（${weeks.length} 週）`}
+        </button>
+      )}
 
       {/* Expandable weekly archive — latest first */}
       {[...weeks].reverse().map((week) => {
@@ -349,6 +414,15 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
 
                     {/* Week summary stats */}
                     <WeekStats records={week.records} />
+
+                    {/* Export week report button */}
+                    <button
+                      onClick={() => handleExportWeek(week)}
+                      disabled={exportingWeek === week.weekNum}
+                      className="w-full mt-1 py-2.5 text-sm font-semibold text-[#d0502a] bg-[#FFF3E8] rounded-lg active:bg-[#FFE8D6] disabled:opacity-50"
+                    >
+                      {exportingWeek === week.weekNum ? '匯出中...' : `📤 匯出 W${week.weekNum} 週報`}
+                    </button>
                   </div>
                 )}
               </div>

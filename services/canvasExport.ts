@@ -470,3 +470,425 @@ function indicatorColorDark(value: string): string {
   if (red.some(v => value.includes(v))) return '#F87171';
   return '#E5E7EB';
 }
+
+// ─── Weekly Report Card (table format for nutritionists) ─────────────────────
+
+const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];
+const INDICATOR_LABELS = ['💧 喝水(ml)', '🥛 高蛋白', '🏃 運動', '🚶 步數', '😴 睡眠', '🚽 排便', '💊 保健品'];
+
+interface WeeklyReportInput {
+  weekNum: number;
+  startDate: Date;
+  endDate: Date;
+  behaviorRecords: BehaviorRecord[];
+  mealCounts: number[]; // per day (Mon-Sun)
+  userName?: string | null;
+}
+
+export async function composeWeeklyReport(input: WeeklyReportInput): Promise<string> {
+  const { weekNum, startDate, endDate, behaviorRecords, mealCounts, userName } = input;
+
+  const COL_HEADER_W = 130;
+  const COL_W = 120;
+  const TABLE_W = COL_HEADER_W + COL_W * 7;
+  const CARD_W = Math.max(TABLE_W + PAD * 2, 1080);
+  const ROW_H = 52;
+
+  // Map behavior records to days (0=Mon, 6=Sun)
+  const dayBehaviors: (BehaviorRecord | null)[] = Array(7).fill(null);
+  for (const b of behaviorRecords) {
+    const d = b.recordDate ? new Date(b.recordDate + 'T00:00:00') : new Date(b.timestamp);
+    const dayIdx = (d.getDay() + 6) % 7;
+    dayBehaviors[dayIdx] = b;
+  }
+
+  // Calculate height
+  const headerH = 100;
+  const tableHeaderH = 44;
+  const indicatorRows = INDICATOR_LABELS.length;
+  const mealRowH = ROW_H;
+  const tableH = tableHeaderH + (indicatorRows + 1) * ROW_H; // +1 for meal row
+  const summaryH = 100;
+  const footerH = 60;
+  const totalH = headerH + tableH + summaryH + footerH + PAD * 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = CARD_W;
+  canvas.height = totalH;
+  const ctx = canvas.getContext('2d')!;
+
+  // Background
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, CARD_W, totalH);
+
+  let y = PAD;
+
+  // Header gradient bar
+  const hGrad = ctx.createLinearGradient(0, y, CARD_W, y);
+  hGrad.addColorStop(0, BRAND_PRIMARY);
+  hGrad.addColorStop(1, BRAND_GOLD);
+  ctx.fillStyle = hGrad;
+  ctx.fillRect(0, y, CARD_W, 4);
+  y += 16;
+
+  // Title
+  ctx.textBaseline = 'top';
+  ctx.font = `bold 32px Georgia, "Times New Roman", serif`;
+  ctx.fillStyle = BRAND_PRIMARY;
+  ctx.fillText('BeBetter', PAD, y);
+  const bw = ctx.measureText('BeBetter').width;
+  ctx.font = `bold 28px "Noto Sans TC", sans-serif`;
+  ctx.fillStyle = '#374151';
+  ctx.fillText(` 第 ${weekNum} 週行為指標報告`, PAD + bw, y + 2);
+  y += 40;
+
+  // Date range + user
+  const fmtD = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
+  const endD = new Date(endDate.getTime() - 86400000);
+  ctx.font = `${NOTE_FONT_SIZE}px "Noto Sans TC", sans-serif`;
+  ctx.fillStyle = '#6B7280';
+  let dateText = `${fmtD(startDate)} ~ ${fmtD(endD)}`;
+  if (userName) dateText += `  |  ${userName}`;
+  ctx.fillText(dateText, PAD, y);
+  y += NOTE_FONT_SIZE * LINE_HEIGHT + 8;
+
+  // Table starts here
+  const tableX = (CARD_W - TABLE_W) / 2;
+
+  // Table header row (weekdays)
+  ctx.fillStyle = '#1F2937';
+  ctx.beginPath();
+  safeRoundRect(ctx, tableX, y, TABLE_W, tableHeaderH, [8, 8, 0, 0]);
+  ctx.fill();
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = `bold 20px "Noto Sans TC", sans-serif`;
+  ctx.textBaseline = 'middle';
+
+  // Empty top-left cell
+  ctx.fillText('項目', tableX + 16, y + tableHeaderH / 2);
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(startDate.getTime() + i * 86400000);
+    const label = `${WEEKDAYS[i]} ${d.getDate()}`;
+    const cx = tableX + COL_HEADER_W + i * COL_W + COL_W / 2;
+    const tw = ctx.measureText(label).width;
+    ctx.fillText(label, cx - tw / 2, y + tableHeaderH / 2);
+  }
+  y += tableHeaderH;
+
+  // Meal count row
+  drawTableRow(ctx, tableX, y, TABLE_W, COL_HEADER_W, COL_W, ROW_H,
+    '🍽 飲食紀錄', mealCounts.map(c => c > 0 ? `${c}筆` : '—'), '#FFF8F0', true);
+  y += ROW_H;
+
+  // Indicator rows
+  const rowConfigs = [
+    (b: BehaviorRecord | null) => b?.waterMl != null ? `${b.waterMl}` : '—',
+    (b: BehaviorRecord | null) => b?.proteinCups != null ? (b.proteinCups === 0 ? '0杯' : `${b.proteinCups}杯${b.proteinGrams ? `\n(${b.proteinGrams}g)` : ''}`) : '—',
+    (b: BehaviorRecord | null) => b?.exercise === true ? (b.exerciseNote ? `${b.exerciseNote}\n${b.exerciseDuration || ''}分` : '有') : b?.exercise === false ? '沒有' : '—',
+    (b: BehaviorRecord | null) => b?.stepsCount ? `${Number(b.stepsCount).toLocaleString()}` : '—',
+    (b: BehaviorRecord | null) => {
+      if (!b?.sleep) return '—';
+      let s = b.sleep;
+      if (b.sleepQuality) s += `\n${b.sleepQuality}`;
+      if (b.bedtime) s += `\n${b.bedtime}`;
+      return s;
+    },
+    (b: BehaviorRecord | null) => b?.bowel ?? '—',
+    (b: BehaviorRecord | null) => b?.supplements?.trim() || '—',
+  ];
+
+  for (let ri = 0; ri < indicatorRows; ri++) {
+    const isAlt = ri % 2 === 0;
+    const values = dayBehaviors.map(b => rowConfigs[ri](b));
+    drawTableRow(ctx, tableX, y, TABLE_W, COL_HEADER_W, COL_W, ROW_H,
+      INDICATOR_LABELS[ri], values, isAlt ? '#F9FAFB' : '#FFFFFF', false);
+    y += ROW_H;
+  }
+
+  // Table border
+  ctx.strokeStyle = '#E5E7EB';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  safeRoundRect(ctx, tableX, y - (indicatorRows + 1) * ROW_H - tableHeaderH, TABLE_W, tableHeaderH + (indicatorRows + 1) * ROW_H, 8);
+  ctx.stroke();
+
+  y += 16;
+
+  // Weekly summary stats
+  const waterVals = dayBehaviors.filter(b => b?.waterMl != null).map(b => b!.waterMl!);
+  const avgWater = waterVals.length > 0 ? Math.round(waterVals.reduce((a, b) => a + b, 0) / waterVals.length) : null;
+  const exerciseDays = dayBehaviors.filter(b => b?.exercise === true).length;
+  const recordDays = dayBehaviors.filter(b => b !== null).length;
+  const totalMeals = mealCounts.reduce((a, b) => a + b, 0);
+
+  ctx.fillStyle = '#FFF8F0';
+  ctx.beginPath();
+  safeRoundRect(ctx, tableX, y, TABLE_W, 70, 12);
+  ctx.fill();
+  ctx.strokeStyle = '#FDDCB5';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  safeRoundRect(ctx, tableX, y, TABLE_W, 70, 12);
+  ctx.stroke();
+
+  ctx.textBaseline = 'top';
+  ctx.font = `bold 22px "Noto Sans TC", sans-serif`;
+  ctx.fillStyle = BRAND_PRIMARY;
+  ctx.fillText('📊 本週小結', tableX + 16, y + 12);
+
+  ctx.font = `20px "Noto Sans TC", sans-serif`;
+  ctx.fillStyle = '#4B5563';
+  const stats = [
+    `📅 記錄 ${recordDays}/7 天`,
+    `🍽 飲食 ${totalMeals} 筆`,
+    avgWater !== null ? `💧 平均 ${avgWater}ml` : '',
+    exerciseDays > 0 ? `🏃 運動 ${exerciseDays} 天` : '',
+  ].filter(Boolean).join('    ');
+  ctx.fillText(stats, tableX + 16, y + 42);
+  y += 86;
+
+  // Footer
+  const footGrad = ctx.createLinearGradient(0, y, CARD_W, y);
+  footGrad.addColorStop(0, BRAND_PRIMARY);
+  footGrad.addColorStop(1, BRAND_GOLD);
+  ctx.fillStyle = footGrad;
+  ctx.fillRect(0, y, CARD_W, 3);
+  ctx.fillStyle = '#FAFAFA';
+  ctx.fillRect(0, y + 3, CARD_W, 50);
+
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold 20px Georgia, "Times New Roman", serif`;
+  ctx.fillStyle = BRAND_PRIMARY;
+  ctx.fillText('BeBetter', PAD, y + 28);
+  const bbw = ctx.measureText('BeBetter').width;
+  ctx.font = `18px "Noto Sans TC", sans-serif`;
+  ctx.fillStyle = '#9CA3AF';
+  ctx.fillText(' — 陪你成為更好的自己', PAD + bbw, y + 28);
+
+  if (userName) {
+    ctx.font = `bold 20px "Noto Sans TC", sans-serif`;
+    ctx.fillStyle = '#6B7280';
+    const nw = ctx.measureText(userName).width;
+    ctx.fillText(userName, CARD_W - PAD - nw, y + 28);
+  }
+  y += 53;
+
+  // Trim
+  const out = document.createElement('canvas');
+  out.width = CARD_W;
+  out.height = y;
+  out.getContext('2d')!.drawImage(canvas, 0, 0);
+  return out.toDataURL('image/jpeg', 0.92);
+}
+
+function drawTableRow(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number,
+  headerW: number, colW: number, rowH: number,
+  label: string, values: string[], bg: string, isMealRow: boolean
+) {
+  // Background
+  ctx.fillStyle = bg;
+  ctx.fillRect(x, y, w, rowH);
+
+  // Bottom border
+  ctx.strokeStyle = '#E5E7EB';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x, y + rowH);
+  ctx.lineTo(x + w, y + rowH);
+  ctx.stroke();
+
+  // Row label
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold 18px "Noto Sans TC", sans-serif`;
+  ctx.fillStyle = '#374151';
+  ctx.fillText(label, x + 12, y + rowH / 2);
+
+  // Values
+  ctx.font = `16px "Noto Sans TC", sans-serif`;
+  for (let i = 0; i < 7; i++) {
+    const val = values[i] || '—';
+    const cx = x + headerW + i * colW + colW / 2;
+    const isEmpty = val === '—';
+
+    // Vertical divider
+    ctx.strokeStyle = '#F3F4F6';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x + headerW + i * colW, y);
+    ctx.lineTo(x + headerW + i * colW, y + rowH);
+    ctx.stroke();
+
+    ctx.fillStyle = isEmpty ? '#D1D5DB' : (isMealRow ? BRAND_PRIMARY : '#1F2937');
+
+    // Multi-line support
+    const lines = val.split('\n');
+    const lineH = 18;
+    const startY = y + rowH / 2 - (lines.length - 1) * lineH / 2;
+    for (let li = 0; li < lines.length; li++) {
+      const tw = ctx.measureText(lines[li]).width;
+      ctx.fillText(lines[li], cx - tw / 2, startY + li * lineH);
+    }
+  }
+}
+
+// ─── Program Summary (multi-week trend) ──────────────────────────────────────
+
+interface ProgramSummaryInput {
+  weeks: Array<{
+    weekNum: number;
+    startDate: Date;
+    avgWater: number | null;
+    exerciseDays: number;
+    mealCount: number;
+    behaviorCount: number;
+    recordDays: number;
+  }>;
+  totalWeeks: number;
+  userName?: string | null;
+}
+
+export async function composeProgramSummary(input: ProgramSummaryInput): Promise<string> {
+  const { weeks, totalWeeks, userName } = input;
+  const CARD_W = 1080;
+  const BAR_AREA_W = CARD_W - PAD * 2 - 60;
+  const BAR_H = 28;
+  const BAR_GAP = 8;
+
+  const headerH = 120;
+  const chartH = weeks.length * (BAR_H + BAR_GAP) + 40;
+  const statsH = 120;
+  const footerH = 60;
+  const totalH = headerH + chartH + statsH + footerH + PAD * 2;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = CARD_W;
+  canvas.height = totalH;
+  const ctx = canvas.getContext('2d')!;
+
+  // Dark background
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, CARD_W, totalH);
+
+  let y = PAD;
+
+  // Accent line
+  const ag = ctx.createLinearGradient(PAD, 0, CARD_W - PAD, 0);
+  ag.addColorStop(0, BRAND_PRIMARY);
+  ag.addColorStop(1, BRAND_GOLD);
+  ctx.fillStyle = ag;
+  ctx.fillRect(PAD, y, CARD_W - PAD * 2, 3);
+  y += 20;
+
+  // Title
+  ctx.textBaseline = 'top';
+  ctx.font = `bold 34px Georgia, "Times New Roman", serif`;
+  ctx.fillStyle = BRAND_GOLD;
+  ctx.fillText('BeBetter', PAD, y);
+  const bw2 = ctx.measureText('BeBetter').width;
+  ctx.font = `bold 30px "Noto Sans TC", sans-serif`;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillText(` ${totalWeeks} 週課程總覽`, PAD + bw2, y + 2);
+  y += 44;
+
+  if (userName) {
+    ctx.font = `22px "Noto Sans TC", sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText(userName, PAD, y);
+    y += 30;
+  }
+  y += 12;
+
+  // Bar chart: each week shows record days as bar
+  const maxRecordDays = 7;
+  ctx.font = `bold 18px "Noto Sans TC", sans-serif`;
+
+  for (const w of weeks) {
+    // Week label
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`W${w.weekNum}`, PAD, y + BAR_H / 2);
+
+    // Bar background
+    const barX = PAD + 50;
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    ctx.beginPath();
+    safeRoundRect(ctx, barX, y, BAR_AREA_W, BAR_H, 6);
+    ctx.fill();
+
+    // Filled bar
+    const ratio = w.recordDays / maxRecordDays;
+    if (ratio > 0) {
+      const barGrad = ctx.createLinearGradient(barX, 0, barX + BAR_AREA_W * ratio, 0);
+      barGrad.addColorStop(0, BRAND_PRIMARY);
+      barGrad.addColorStop(1, BRAND_GOLD);
+      ctx.fillStyle = barGrad;
+      ctx.beginPath();
+      safeRoundRect(ctx, barX, y, BAR_AREA_W * ratio, BAR_H, 6);
+      ctx.fill();
+    }
+
+    // Stats text inside bar
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `14px "Noto Sans TC", sans-serif`;
+    const statText = `${w.recordDays}/7天  🍽${w.mealCount}  📋${w.behaviorCount}${w.avgWater != null ? `  💧${w.avgWater}ml` : ''}  🏃${w.exerciseDays}天`;
+    ctx.fillText(statText, barX + 10, y + BAR_H / 2);
+
+    ctx.font = `bold 18px "Noto Sans TC", sans-serif`;
+    y += BAR_H + BAR_GAP;
+  }
+
+  y += 16;
+
+  // Overall stats
+  const totalRecordDays = weeks.reduce((s, w) => s + w.recordDays, 0);
+  const totalMeals = weeks.reduce((s, w) => s + w.mealCount, 0);
+  const totalBehaviors = weeks.reduce((s, w) => s + w.behaviorCount, 0);
+  const allWaters = weeks.filter(w => w.avgWater != null).map(w => w.avgWater!);
+  const overallAvgWater = allWaters.length > 0 ? Math.round(allWaters.reduce((a, b) => a + b, 0) / allWaters.length) : null;
+  const totalExercise = weeks.reduce((s, w) => s + w.exerciseDays, 0);
+  const completionRate = Math.round((totalRecordDays / (weeks.length * 7)) * 100);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ctx.beginPath();
+  safeRoundRect(ctx, PAD, y, CARD_W - PAD * 2, 80, 12);
+  ctx.fill();
+
+  ctx.textBaseline = 'top';
+  ctx.font = `bold 22px "Noto Sans TC", sans-serif`;
+  ctx.fillStyle = BRAND_GOLD;
+  ctx.fillText('🏆 整期成果', PAD + 16, y + 12);
+
+  ctx.font = `20px "Noto Sans TC", sans-serif`;
+  ctx.fillStyle = '#FFFFFF';
+  const summaryLine = [
+    `完成率 ${completionRate}%`,
+    `共 ${totalRecordDays} 天`,
+    `🍽 ${totalMeals} 筆`,
+    `📋 ${totalBehaviors} 筆`,
+    overallAvgWater != null ? `💧 均${overallAvgWater}ml` : '',
+    `🏃 ${totalExercise} 天`,
+  ].filter(Boolean).join('  |  ');
+  ctx.fillText(summaryLine, PAD + 16, y + 46);
+  y += 96;
+
+  // Footer
+  ctx.fillStyle = ag;
+  ctx.fillRect(PAD, y, CARD_W - PAD * 2, 2);
+  y += 12;
+  ctx.font = `18px Georgia, "Times New Roman", serif`;
+  ctx.fillStyle = BRAND_GOLD;
+  ctx.globalAlpha = 0.6;
+  ctx.fillText('BeBetter — 陪你成為更好的自己', PAD, y);
+  ctx.globalAlpha = 1;
+  y += 36;
+
+  const out = document.createElement('canvas');
+  out.width = CARD_W;
+  out.height = y;
+  out.getContext('2d')!.drawImage(canvas, 0, 0);
+  return out.toDataURL('image/jpeg', 0.92);
+}
