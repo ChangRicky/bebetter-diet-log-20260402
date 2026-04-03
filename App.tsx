@@ -65,7 +65,11 @@ const App: React.FC = () => {
           <DailyChecklist onRecordSaved={handleRecordSaved} />
         )}
         {activeTab === 'history' && (
-          <HistoryViewer records={records} onRecordSaved={handleRecordSaved} />
+          <HistoryViewer
+            records={records}
+            onRecordSaved={handleRecordSaved}
+            onDuplicateMeal={() => setActiveTab('meal')}
+          />
         )}
       </main>
 

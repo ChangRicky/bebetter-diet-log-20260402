@@ -44,7 +44,9 @@ export interface BehaviorRecord {
   stepsCount: string;
   sleep: SleepLevel | null;
   sleepQuality: SleepQuality | null;
+  bedtime: string;              // e.g. "23:30"
   bowel: BowelCount | null;
+  supplements: string;          // 保健品/藥物紀錄
   generalNote: string;
   /** Card color theme */
   cardTheme: 'dark' | 'green' | 'navy' | 'purple';

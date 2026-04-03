@@ -353,10 +353,17 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
     exerciseVal = '沒有';
   }
   const stepsVal = record.stepsCount ? `${Number(record.stepsCount).toLocaleString()} 步` : null;
-  const sleepVal = record.sleep
-    ? (record.sleepQuality ? `${record.sleep}（${record.sleepQuality}）` : record.sleep)
-    : null;
+  let sleepVal: string | null = null;
+  if (record.sleep) {
+    const parts: string[] = [record.sleep];
+    if (record.sleepQuality) parts.push(`（${record.sleepQuality}）`);
+    if (record.bedtime) parts.push(`・${record.bedtime}就寢`);
+    sleepVal = parts.join('');
+  } else if (record.bedtime) {
+    sleepVal = `${record.bedtime}就寢`;
+  }
   const bowelVal = record.bowel;
+  const supplementsVal = record.supplements?.trim() || null;
 
   const indicatorRows = [
     { icon: '💧', label: '喝水量', value: waterVal },
@@ -365,6 +372,7 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
     { icon: '🚶', label: '走路', value: stepsVal },
     { icon: '😴', label: '睡眠', value: sleepVal },
     { icon: '🚽', label: '排便', value: bowelVal },
+    { icon: '💊', label: '保健品', value: supplementsVal },
   ];
 
   for (const row of indicatorRows) {
@@ -445,7 +453,7 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
 }
 
 function rows_count(record: BehaviorRecord): number {
-  return 6; // 6 indicator rows always
+  return 7; // 7 indicator rows (water, protein, exercise, steps, sleep, bowel, supplements)
 }
 
 function formatRecordDate(dateStr: string): string {

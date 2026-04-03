@@ -132,6 +132,13 @@ export const ExportActions: React.FC<ExportActionsProps> = ({
         </p>
       </div>
 
+      {/* Album reminder */}
+      <div className="bg-green-50 rounded-xl p-3 mb-3 border border-green-200/50">
+        <p className="text-xs text-green-700 leading-relaxed">
+          <span className="font-semibold">📌 小提醒：</span>傳到 LINE 之後，記得把圖片<span className="font-semibold">加入群組相簿</span>，這樣營養師才能方便查看你的紀錄喔！
+        </p>
+      </div>
+
       <div className="flex gap-3">
         <button
           onClick={handleDownload}

@@ -28,7 +28,9 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
   const [stepsCount, setStepsCount] = useState(draft.current?.stepsCount ?? '');
   const [sleep, setSleep] = useState<SleepLevel | null>((draft.current?.sleep as SleepLevel) ?? null);
   const [sleepQuality, setSleepQuality] = useState<SleepQuality | null>((draft.current?.sleepQuality as SleepQuality) ?? null);
+  const [bedtime, setBedtime] = useState(draft.current?.bedtime ?? '');
   const [bowel, setBowel] = useState<BowelCount | null>((draft.current?.bowel as BowelCount) ?? null);
+  const [supplements, setSupplements] = useState(draft.current?.supplements ?? '');
   const [generalNote, setGeneralNote] = useState(draft.current?.generalNote ?? '');
   const [cardTheme, setCardTheme] = useState<BehaviorRecord['cardTheme']>((draft.current?.cardTheme as BehaviorRecord['cardTheme']) ?? 'dark');
 
@@ -41,9 +43,9 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
     saveBehaviorDraft({
       recordDate, waterMl, customWater, proteinCups, proteinGrams,
       exercise, exerciseNote, exerciseDuration, stepsCount,
-      sleep, sleepQuality, bowel, generalNote, cardTheme,
+      sleep, sleepQuality, bedtime, bowel, supplements, generalNote, cardTheme,
     });
-  }, [recordDate, waterMl, customWater, proteinCups, proteinGrams, exercise, exerciseNote, exerciseDuration, stepsCount, sleep, sleepQuality, bowel, generalNote, cardTheme, cardImageUrl]);
+  }, [recordDate, waterMl, customWater, proteinCups, proteinGrams, exercise, exerciseNote, exerciseDuration, stepsCount, sleep, sleepQuality, bedtime, bowel, supplements, generalNote, cardTheme, cardImageUrl]);
 
   const hasAnyValue = waterMl !== null || proteinCups !== null || exercise !== null ||
     stepsCount !== '' || sleep !== null || bowel !== null;
@@ -69,7 +71,8 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
       recordDate,
       waterMl, proteinCups, proteinGrams,
       exercise, exerciseNote, exerciseDuration,
-      stepsCount, sleep, sleepQuality, bowel, generalNote, cardTheme,
+      stepsCount, sleep, sleepQuality, bedtime: bedtime || '',
+      bowel, supplements: supplements || '', generalNote, cardTheme,
     };
     await saveRecord(record);
     clearBehaviorDraft();
@@ -84,8 +87,8 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
     setWaterMl(null); setCustomWater('');
     setProteinCups(null); setShowProteinDetail(false); setProteinGrams('');
     setExercise(null); setExerciseNote(''); setExerciseDuration('');
-    setStepsCount(''); setSleep(null); setSleepQuality(null); setBowel(null);
-    setGeneralNote(''); setCardTheme('dark'); setCardImageUrl(null);
+    setStepsCount(''); setSleep(null); setSleepQuality(null); setBedtime('');
+    setBowel(null); setSupplements(''); setGeneralNote(''); setCardTheme('dark'); setCardImageUrl(null);
     clearBehaviorDraft();
   };
 
@@ -249,6 +252,14 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
             onChange={setSleepQuality}
             colorMap={{ '很好': 'bg-[#d0502a] text-white', '還好': 'bg-yellow-500 text-white', '不太好': 'bg-orange-500 text-white', '很差': 'bg-red-500 text-white' }}
           />
+          <p className="text-xs text-gray-400 mt-3 mb-2">就寢時間</p>
+          <input
+            type="time"
+            value={bedtime}
+            onChange={(e) => setBedtime(e.target.value)}
+            className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50 focus:border-[#efa93b]"
+            style={{ fontSize: '16px' }}
+          />
         </Card>
 
         {/* 排便 */}
@@ -258,6 +269,18 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
             value={bowel}
             onChange={setBowel}
             colorMap={{ '沒有': 'bg-gray-400 text-white', '1次': 'bg-[#d0502a] text-white', '2次': 'bg-[#d0502a] text-white', '3次以上': 'bg-blue-500 text-white' }}
+          />
+        </Card>
+
+        {/* 保健品/藥物 */}
+        <Card icon="💊" label="保健品 / 藥物" subLabel="選填">
+          <textarea
+            value={supplements}
+            onChange={(e) => setSupplements(e.target.value)}
+            rows={2}
+            placeholder="例：B群、魚油、維他命D、益生菌..."
+            className="w-full p-3 border border-gray-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
+            style={{ fontSize: '16px' }}
           />
         </Card>
 

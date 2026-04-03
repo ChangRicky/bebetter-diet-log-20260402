@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { composeMealCard, composeBehaviorCard } from '../../services/canvasExport';
 import { getLiffUserName } from '../../services/liffService';
+import { saveMealDraft } from '../../services/draftStorage';
 import type { AppRecord, MealRecord, BehaviorRecord } from '../../types';
 
 interface HistoryViewerProps {
   records: AppRecord[];
   onRecordSaved?: () => void;
+  onDuplicateMeal?: () => void;
 }
 
-export const HistoryViewer: React.FC<HistoryViewerProps> = ({ records }) => {
+export const HistoryViewer: React.FC<HistoryViewerProps> = ({ records, onDuplicateMeal }) => {
   const [filter, setFilter] = useState<'all' | 'meal' | 'behavior'>('all');
 
   const filtered = records
@@ -49,7 +51,7 @@ export const HistoryViewer: React.FC<HistoryViewerProps> = ({ records }) => {
         <div className="flex flex-col gap-3">
           {filtered.map((record) =>
             record.type === 'meal' ? (
-              <MealCard key={record.id} record={record} />
+              <MealCard key={record.id} record={record} onDuplicate={onDuplicateMeal} />
             ) : (
               <BehaviorCard key={record.id} record={record} />
             )
@@ -60,8 +62,9 @@ export const HistoryViewer: React.FC<HistoryViewerProps> = ({ records }) => {
   );
 };
 
-const MealCard: React.FC<{ record: MealRecord }> = ({ record }) => {
+const MealCard: React.FC<{ record: MealRecord; onDuplicate?: () => void }> = ({ record, onDuplicate }) => {
   const [exporting, setExporting] = useState(false);
+  const [copied, setCopied] = useState(false);
   const date = new Date(record.timestamp);
 
   const handleExport = async () => {
@@ -71,6 +74,18 @@ const MealCard: React.FC<{ record: MealRecord }> = ({ record }) => {
       downloadImage(url, `BeBetter飲食紀錄-${date.toLocaleDateString('zh-TW')}.jpg`);
     } catch { /* ignore */ }
     setExporting(false);
+  };
+
+  const handleDuplicate = () => {
+    saveMealDraft({
+      items: record.items.map(i => ({ name: i.name, tags: i.tags.map(t => ({ tag: t.tag, qty: t.qty })) })),
+      mealType: record.mealType,
+      note: '',
+      showNote: false,
+    });
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    onDuplicate?.();
   };
 
   return (
@@ -92,13 +107,21 @@ const MealCard: React.FC<{ record: MealRecord }> = ({ record }) => {
               })}
             </span>
           </div>
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="text-xs text-[#d0502a] font-medium px-3 py-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-[#FFF3E8] active:bg-[#FFE8D6] disabled:opacity-50"
-          >
-            {exporting ? '...' : '💾 下載'}
-          </button>
+          <div className="flex gap-1.5">
+            <button
+              onClick={handleDuplicate}
+              className="text-xs text-gray-600 font-medium px-2.5 py-2 min-h-[44px] flex items-center justify-center rounded-lg bg-gray-100 active:bg-gray-200"
+            >
+              {copied ? '✅ 已複製' : '📋 複製'}
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="text-xs text-[#d0502a] font-medium px-2.5 py-2 min-h-[44px] flex items-center justify-center rounded-lg bg-[#FFF3E8] active:bg-[#FFE8D6] disabled:opacity-50"
+            >
+              {exporting ? '...' : '💾 下載'}
+            </button>
+          </div>
         </div>
         {Array.isArray(record.items) && record.items.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">
@@ -135,8 +158,9 @@ const BehaviorCard: React.FC<{ record: BehaviorRecord }> = ({ record }) => {
     { icon: '🥛', label: '蛋白', value: record.proteinCups != null ? `${record.proteinCups}杯` : null },
     { icon: '🏃', label: '運動', value: record.exercise === true ? (record.exerciseNote || '有') : record.exercise === false ? '沒有' : null },
     { icon: '🚶', label: '步數', value: record.stepsCount ? `${record.stepsCount}步` : null },
-    { icon: '😴', label: '睡眠', value: record.sleep ? `${record.sleep}${record.sleepQuality ? `(${record.sleepQuality})` : ''}` : null },
+    { icon: '😴', label: '睡眠', value: record.sleep ? `${record.sleep}${record.sleepQuality ? `(${record.sleepQuality})` : ''}${record.bedtime ? ` ${record.bedtime}就寢` : ''}` : record.bedtime ? `${record.bedtime}就寢` : null },
     { icon: '🚽', label: '排便', value: record.bowel ?? null },
+    { icon: '💊', label: '保健品', value: record.supplements?.trim() || null },
   ].filter((i) => i.value != null && i.value !== 'undefined');
 
   return (
