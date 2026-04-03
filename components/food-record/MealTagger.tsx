@@ -114,7 +114,6 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
             <input
               type="file"
               accept="image/*"
-              capture="environment"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -209,15 +208,15 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
 
               {/* Row 3: Selected tags with qty steppers */}
               {item.tags.length > 0 && (
-                <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-gray-100">
+                <div className="flex flex-col gap-2.5 mt-2 pt-2 border-t border-gray-100">
                   {item.tags.map((entry) => (
                     <div key={entry.tag} className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600 font-medium">{entry.tag}</span>
-                      <div className="flex items-center gap-1 bg-gray-50 rounded-xl px-1 py-1">
+                      <span className="text-base text-gray-700 font-semibold">{entry.tag}</span>
+                      <div className="flex items-center gap-1.5 bg-gray-50 rounded-xl px-1.5 py-1">
                         <button
                           onClick={() => updateTagQty(index, entry.tag, -0.5)}
                           disabled={entry.qty <= 0.5}
-                          className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center text-gray-600 active:bg-gray-50 disabled:opacity-30 font-bold text-base"
+                          className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center text-gray-600 active:bg-gray-50 disabled:opacity-30 font-bold text-lg"
                         >
                           −
                         </button>
@@ -227,7 +226,7 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
                         />
                         <button
                           onClick={() => updateTagQty(index, entry.tag, 0.5)}
-                          className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center text-gray-600 active:bg-gray-50 font-bold text-base"
+                          className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center text-gray-600 active:bg-gray-50 font-bold text-lg"
                         >
                           +
                         </button>
@@ -324,8 +323,8 @@ const QtyInput: React.FC<{ value: number; onChange: (v: number) => void }> = ({ 
             commit();
           }
         }}
-        className="w-14 text-center text-sm font-semibold text-gray-700 border border-[#efa93b] rounded-lg p-1 focus:outline-none focus:ring-1 focus:ring-[#efa93b]"
-        style={{ fontSize: '16px' }}
+        className="w-16 text-center font-bold text-gray-700 border-2 border-[#efa93b] rounded-lg p-1 focus:outline-none focus:ring-2 focus:ring-[#efa93b]"
+        style={{ fontSize: '18px' }}
         autoFocus
       />
     );
@@ -334,8 +333,8 @@ const QtyInput: React.FC<{ value: number; onChange: (v: number) => void }> = ({ 
   return (
     <button
       onClick={startEdit}
-      className="w-12 text-center text-sm font-semibold text-[#d0502a] underline decoration-dotted underline-offset-2"
-      style={{ minHeight: '32px' }}
+      className="w-16 text-center font-bold text-[#d0502a] underline decoration-dotted underline-offset-2"
+      style={{ minHeight: '36px', fontSize: '18px' }}
     >
       {value}份
     </button>

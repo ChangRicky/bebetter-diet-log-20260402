@@ -195,58 +195,64 @@ const BehaviorCard: React.FC<{ record: BehaviorRecord }> = ({ record }) => {
   );
 };
 
-// ── Weekly Summary ──────────────────────────────────────────────────────────────
+// ── Weekly Summary with data archive ────────────────────────────────────────────
+
+const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 
 interface WeekData {
-  weekLabel: string;
   weekNum: number;
+  startDate: Date;
+  endDate: Date;
+  records: AppRecord[];
   mealCount: number;
   behaviorCount: number;
-  total: number;
-  startDate: Date;
 }
 
-function getWeeklyData(records: AppRecord[]): WeekData[] {
+function buildWeeks(records: AppRecord[]): WeekData[] {
   if (records.length === 0) return [];
-
   const sorted = [...records].sort((a, b) => a.timestamp - b.timestamp);
-  const firstDate = new Date(sorted[0].timestamp);
-  // Start of first week (Monday)
-  const firstMonday = new Date(firstDate);
-  firstMonday.setHours(0, 0, 0, 0);
-  const dayOfWeek = firstMonday.getDay();
-  firstMonday.setDate(firstMonday.getDate() - ((dayOfWeek + 6) % 7));
+  const first = new Date(sorted[0].timestamp);
+  first.setHours(0, 0, 0, 0);
+  const dow = first.getDay();
+  const firstMon = new Date(first);
+  firstMon.setDate(firstMon.getDate() - ((dow + 6) % 7));
 
   const now = new Date();
   const weekMs = 7 * 24 * 60 * 60 * 1000;
-  const totalWeeks = Math.ceil((now.getTime() - firstMonday.getTime()) / weekMs);
-  const maxWeeks = Math.min(totalWeeks, 20); // Cap at 20 weeks
+  const total = Math.min(Math.ceil((now.getTime() - firstMon.getTime()) / weekMs), 20);
 
   const weeks: WeekData[] = [];
-  for (let i = 0; i < maxWeeks; i++) {
-    const weekStart = new Date(firstMonday.getTime() + i * weekMs);
-    const weekEnd = new Date(weekStart.getTime() + weekMs);
-    const weekRecords = records.filter(r => r.timestamp >= weekStart.getTime() && r.timestamp < weekEnd.getTime());
-    const m = weekRecords.filter(r => r.type === 'meal').length;
-    const b = weekRecords.filter(r => r.type === 'behavior').length;
+  for (let i = 0; i < total; i++) {
+    const s = new Date(firstMon.getTime() + i * weekMs);
+    const e = new Date(s.getTime() + weekMs);
+    const wr = records.filter(r => r.timestamp >= s.getTime() && r.timestamp < e.getTime());
     weeks.push({
-      weekLabel: `${weekStart.getMonth() + 1}/${weekStart.getDate()}`,
-      weekNum: i + 1,
-      mealCount: m,
-      behaviorCount: b,
-      total: m + b,
-      startDate: weekStart,
+      weekNum: i + 1, startDate: s, endDate: e, records: wr,
+      mealCount: wr.filter(r => r.type === 'meal').length,
+      behaviorCount: wr.filter(r => r.type === 'behavior').length,
     });
   }
   return weeks;
 }
 
+/** Group records by date string */
+function groupByDate(records: AppRecord[]): Map<string, AppRecord[]> {
+  const map = new Map<string, AppRecord[]>();
+  for (const r of records) {
+    const d = new Date(r.timestamp);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(r);
+  }
+  return new Map([...map.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+}
+
 const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
-  const weeks = getWeeklyData(records);
+  const weeks = buildWeeks(records);
+  const [expandedWeek, setExpandedWeek] = useState<number | null>(weeks.length > 0 ? weeks[weeks.length - 1].weekNum : null);
   const totalMeals = records.filter(r => r.type === 'meal').length;
   const totalBehaviors = records.filter(r => r.type === 'behavior').length;
-  const maxPerWeek = Math.max(...weeks.map(w => w.total), 1);
-  const streakWeeks = weeks.filter(w => w.total > 0).length;
+  const streakWeeks = weeks.filter(w => w.records.length > 0).length;
 
   if (records.length === 0) {
     return (
@@ -287,121 +293,143 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
         </p>
       </div>
 
-      {/* Weekly bar chart */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">每週紀錄量</h3>
-        <div className="flex flex-col gap-1.5">
-          {weeks.map((week) => (
-            <div key={week.weekNum} className="flex items-center gap-2">
-              <span className="text-xs text-gray-400 w-16 text-right shrink-0">
-                W{week.weekNum} {week.weekLabel}
-              </span>
-              <div className="flex-1 flex gap-0.5 h-5">
-                {week.mealCount > 0 && (
-                  <div
-                    className="bg-[#d0502a] rounded-sm"
-                    style={{ width: `${(week.mealCount / maxPerWeek) * 100}%`, minWidth: '4px' }}
-                    title={`飲食 ${week.mealCount} 筆`}
-                  />
-                )}
-                {week.behaviorCount > 0 && (
-                  <div
-                    className="bg-[#efa93b] rounded-sm"
-                    style={{ width: `${(week.behaviorCount / maxPerWeek) * 100}%`, minWidth: '4px' }}
-                    title={`行為 ${week.behaviorCount} 筆`}
-                  />
-                )}
-                {week.total === 0 && (
-                  <div className="bg-gray-100 rounded-sm w-full" />
+      {/* Expandable weekly archive — latest first */}
+      {[...weeks].reverse().map((week) => {
+        const isOpen = expandedWeek === week.weekNum;
+        const fmtDate = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
+        const dailyMap = groupByDate(week.records);
+        const completionRate = Math.round((week.records.length > 0 ? 1 : 0) * 100);
+
+        return (
+          <div key={week.weekNum} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* Week header — clickable */}
+            <button
+              onClick={() => setExpandedWeek(isOpen ? null : week.weekNum)}
+              className="w-full flex items-center justify-between p-3 active:bg-gray-50"
+            >
+              <div className="flex items-center gap-2">
+                <span className="bg-[#d0502a] text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                  W{week.weekNum}
+                </span>
+                <span className="text-sm font-medium text-gray-700">
+                  {fmtDate(week.startDate)} ~ {fmtDate(new Date(week.endDate.getTime() - 86400000))}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">
+                  🍽{week.mealCount} 📋{week.behaviorCount}
+                </span>
+                <span className={`text-sm transition-transform ${isOpen ? 'rotate-180' : ''}`}>▾</span>
+              </div>
+            </button>
+
+            {/* Expanded: daily detail */}
+            {isOpen && (
+              <div className="border-t border-gray-100 px-3 pb-3">
+                {week.records.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-4">這週沒有紀錄</p>
+                ) : (
+                  <div className="flex flex-col gap-2 mt-2">
+                    {[...dailyMap.entries()].map(([dateKey, dayRecords]) => {
+                      const d = new Date(dateKey + 'T00:00:00');
+                      const dayLabel = WEEKDAY_LABELS[(d.getDay() + 6) % 7];
+                      return (
+                        <div key={dateKey} className="bg-gray-50 rounded-lg p-2.5">
+                          <p className="text-xs font-semibold text-gray-600 mb-1.5">
+                            {d.getMonth() + 1}/{d.getDate()}（{dayLabel}）
+                          </p>
+                          <div className="flex flex-col gap-1">
+                            {dayRecords.sort((a, b) => a.timestamp - b.timestamp).map((r) => (
+                              <DayRecordRow key={r.id} record={r} />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Week summary stats */}
+                    <WeekStats records={week.records} />
+                  </div>
                 )}
               </div>
-              <span className="text-xs text-gray-500 w-6 text-right shrink-0">{week.total}</span>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center gap-4 mt-3 pt-2 border-t border-gray-100">
-          <span className="flex items-center gap-1 text-xs text-gray-500">
-            <span className="w-3 h-3 rounded-sm bg-[#d0502a] inline-block" /> 飲食
-          </span>
-          <span className="flex items-center gap-1 text-xs text-gray-500">
-            <span className="w-3 h-3 rounded-sm bg-[#efa93b] inline-block" /> 行為指標
-          </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+/** Single record row inside daily detail */
+const DayRecordRow: React.FC<{ record: AppRecord }> = ({ record }) => {
+  const time = new Date(record.timestamp).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+
+  if (record.type === 'meal') {
+    const meal = record as MealRecord;
+    const foodList = Array.isArray(meal.items)
+      ? meal.items.map(i => `${i.name}（${i.tags.map(t => `${t.tag}${t.qty}份`).join('、')}）`).join('、')
+      : '';
+    return (
+      <div className="flex items-start gap-2">
+        <span className="text-xs text-gray-400 shrink-0 mt-0.5">{time}</span>
+        <div>
+          <span className="text-xs font-semibold text-[#d0502a]">{meal.mealType}</span>
+          <span className="text-xs text-gray-600 ml-1">{foodList}</span>
         </div>
       </div>
+    );
+  }
 
-      {/* Daily heatmap — last 10 weeks */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">每日紀錄熱力圖</h3>
-        <DailyHeatmap records={records} weeks={Math.min(weeks.length, 10)} />
+  const beh = record as BehaviorRecord;
+  const parts: string[] = [];
+  if (beh.waterMl != null) parts.push(`💧${beh.waterMl}ml`);
+  if (beh.proteinCups != null) parts.push(`🥛${beh.proteinCups}杯`);
+  if (beh.exercise === true) parts.push(`🏃${beh.exerciseNote || '有'}${beh.exerciseDuration ? ` ${beh.exerciseDuration}分` : ''}`);
+  if (beh.stepsCount) parts.push(`🚶${Number(beh.stepsCount).toLocaleString()}步`);
+  if (beh.sleep) parts.push(`😴${beh.sleep}${beh.sleepQuality ? `(${beh.sleepQuality})` : ''}`);
+  if (beh.bowel) parts.push(`🚽${beh.bowel}`);
+  if (beh.supplements?.trim()) parts.push(`💊${beh.supplements.trim()}`);
+
+  return (
+    <div className="flex items-start gap-2">
+      <span className="text-xs text-gray-400 shrink-0 mt-0.5">{time}</span>
+      <div>
+        <span className="text-xs font-semibold text-gray-700">行為指標</span>
+        <span className="text-xs text-gray-600 ml-1">{parts.join('  ')}</span>
       </div>
     </div>
   );
 };
 
-/** Simple daily heatmap — shows colored squares for each day */
-const DailyHeatmap: React.FC<{ records: AppRecord[]; weeks: number }> = ({ records, weeks: numWeeks }) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dayOfWeek = today.getDay();
-  // Start from numWeeks ago's Monday
-  const startDate = new Date(today);
-  startDate.setDate(startDate.getDate() - ((dayOfWeek + 6) % 7) - (numWeeks - 1) * 7);
+/** Week-level aggregate stats */
+const WeekStats: React.FC<{ records: AppRecord[] }> = ({ records }) => {
+  const meals = records.filter(r => r.type === 'meal') as MealRecord[];
+  const behaviors = records.filter(r => r.type === 'behavior') as BehaviorRecord[];
 
-  const dayMs = 24 * 60 * 60 * 1000;
-  const totalDays = Math.ceil((today.getTime() - startDate.getTime()) / dayMs) + 1;
-
-  // Build counts per day
-  const countMap = new Map<string, number>();
-  for (const r of records) {
+  // Count unique days with records
+  const uniqueDays = new Set(records.map(r => {
     const d = new Date(r.timestamp);
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    countMap.set(key, (countMap.get(key) || 0) + 1);
-  }
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  })).size;
 
-  const days: Array<{ date: Date; count: number; col: number; row: number }> = [];
-  for (let i = 0; i < totalDays; i++) {
-    const d = new Date(startDate.getTime() + i * dayMs);
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-    const row = (d.getDay() + 6) % 7; // Mon=0, Sun=6
-    const col = Math.floor(i / 7);
-    days.push({ date: d, count: countMap.get(key) || 0, col, row });
-  }
+  // Average water
+  const waterRecords = behaviors.filter(b => b.waterMl != null);
+  const avgWater = waterRecords.length > 0
+    ? Math.round(waterRecords.reduce((s, b) => s + (b.waterMl || 0), 0) / waterRecords.length)
+    : null;
 
-  const maxCount = Math.max(...days.map(d => d.count), 1);
-  const numCols = Math.ceil(totalDays / 7);
-
-  const getColor = (count: number) => {
-    if (count === 0) return '#F3F4F6';
-    const intensity = Math.min(count / maxCount, 1);
-    if (intensity < 0.33) return '#FED7AA';
-    if (intensity < 0.66) return '#F97316';
-    return '#D0502A';
-  };
+  // Exercise count
+  const exerciseDays = behaviors.filter(b => b.exercise === true).length;
 
   return (
-    <div className="overflow-x-auto">
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${numCols}, 14px)`, gridTemplateRows: 'repeat(7, 14px)', gap: '2px' }}>
-        {days.map((day, i) => (
-          <div
-            key={i}
-            style={{
-              gridColumn: day.col + 1,
-              gridRow: day.row + 1,
-              width: 14,
-              height: 14,
-              borderRadius: 2,
-              backgroundColor: day.date > today ? 'transparent' : getColor(day.count),
-            }}
-            title={`${day.date.getMonth() + 1}/${day.date.getDate()}: ${day.count} 筆`}
-          />
-        ))}
-      </div>
-      <div className="flex items-center gap-1 mt-2">
-        <span className="text-xs text-gray-400">少</span>
-        {['#F3F4F6', '#FED7AA', '#F97316', '#D0502A'].map((c) => (
-          <span key={c} style={{ width: 12, height: 12, borderRadius: 2, backgroundColor: c, display: 'inline-block' }} />
-        ))}
-        <span className="text-xs text-gray-400">多</span>
+    <div className="bg-[#FFF8F0] rounded-lg p-2.5 mt-1">
+      <p className="text-xs font-semibold text-[#d0502a] mb-1">本週小結</p>
+      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-600">
+        <span>📅 記錄 {uniqueDays} 天</span>
+        <span>🍽 飲食 {meals.length} 筆</span>
+        <span>📋 行為 {behaviors.length} 筆</span>
+        {avgWater !== null && <span>💧 平均喝水 {avgWater}ml</span>}
+        {exerciseDays > 0 && <span>🏃 運動 {exerciseDays} 天</span>}
       </div>
     </div>
   );
