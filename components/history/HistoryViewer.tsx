@@ -255,8 +255,8 @@ type CoursePlanId = 'standard' | 'premium' | 'loop_full' | 'loop_lite';
 const COURSE_PLANS: { id: CoursePlanId; label: string; weeks: number; desc: string; isMain: boolean }[] = [
   { id: 'standard', label: 'Standard 標準版', weeks: 8, desc: '8 週基礎課程', isMain: true },
   { id: 'premium', label: 'Premium 高級版', weeks: 10, desc: '10 週進階課程', isMain: true },
-  { id: 'loop_full', label: 'Loop Full 延伸', weeks: 8, desc: '高級版延伸 8 週', isMain: false },
-  { id: 'loop_lite', label: 'Loop Lite 延伸', weeks: 8, desc: '標準版延伸 8 週', isMain: false },
+  { id: 'loop_full', label: 'Loop Full 延長', weeks: 8, desc: '高級版延長 8 週', isMain: false },
+  { id: 'loop_lite', label: 'Loop Lite 延長', weeks: 8, desc: '標準版延長 8 週', isMain: false },
 ];
 
 interface CoursePeriod {
@@ -461,11 +461,21 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
       const weekData = periodWeeks.map(w => {
         const behaviors = w.records.filter(r => r.type === 'behavior') as BehaviorRecord[];
         const waterVals = behaviors.filter(b => b.waterMl != null).map(b => b.waterMl!);
+        const stepVals = behaviors.filter(b => b.stepsCount && Number(b.stepsCount) > 0).map(b => Number(b.stepsCount));
+        const proteinVals = behaviors.filter(b => b.proteinCups != null).map(b => b.proteinCups!);
+        const bowelYes = behaviors.filter(b => b.bowel && b.bowel !== '沒有').length;
+        const bowelTotal = behaviors.filter(b => b.bowel != null).length;
+        const sleepRecords = behaviors.filter(b => b.sleep != null);
+        const sleepGood = sleepRecords.filter(b => b.sleep === '7-8hr' || b.sleep === '8hr+').length;
         return {
           weekNum: w.weekNum,
           startDate: w.startDate,
           avgWater: waterVals.length > 0 ? Math.round(waterVals.reduce((a, b) => a + b, 0) / waterVals.length) : null,
           exerciseDays: behaviors.filter(b => b.exercise === true).length,
+          avgSteps: stepVals.length > 0 ? Math.round(stepVals.reduce((a, b) => a + b, 0) / stepVals.length) : null,
+          avgProtein: proteinVals.length > 0 ? Math.round(proteinVals.reduce((a, b) => a + b, 0) / proteinVals.length * 10) / 10 : null,
+          bowelRatio: bowelTotal > 0 ? `${bowelYes}/${bowelTotal}` : null,
+          sleepGoodRatio: sleepRecords.length > 0 ? `${sleepGood}/${sleepRecords.length}` : null,
           mealCount: w.mealCount,
           behaviorCount: w.behaviorCount,
           recordDays: new Set(w.records.map(r => {
@@ -474,7 +484,7 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
           })).size,
         };
       });
-      const url = await composeProgramSummary({ weeks: weekData, totalWeeks: period.weeks, userName });
+      const url = await composeProgramSummary({ weeks: weekData, totalWeeks: period.weeks, planLabel: period.label, userName });
       downloadImage(url, `BeBetter-${period.label}-${period.weeks}週總覽.jpg`);
     } catch { /* ignore */ }
     setExportingProgram(null);
@@ -524,7 +534,13 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
         <div className="flex items-center justify-between">
           <div className="text-sm text-gray-600">
             {periods.length > 0
-              ? `📅 ${periods.length} 個課程期間`
+              ? (() => {
+                  const summary = periods.map(p => {
+                    const plan = COURSE_PLANS.find(c => c.id === p.planId);
+                    return plan?.isMain ? p.label.split(' ')[0] : p.label;
+                  }).join(' + ');
+                  return `📅 ${summary}`;
+                })()
               : '📅 尚未設定課程方案'}
           </div>
           <button
@@ -534,47 +550,102 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
             {showSettings ? '收合' : '設定'}
           </button>
         </div>
-        {showSettings && (
-          <div className="mt-3 pt-3 border-t border-gray-100 flex flex-col gap-3">
-            {/* Existing periods */}
-            {periods.map((p) => {
+
+        {/* Active period timeline (always visible when periods exist) */}
+        {!showSettings && periods.length > 0 && (
+          <div className="mt-2 flex flex-col gap-1.5">
+            {periods.map((p, i) => {
               const plan = COURSE_PLANS.find(c => c.id === p.planId);
               const endD = new Date(p.startDate + 'T00:00:00');
               endD.setDate(endD.getDate() + p.weeks * 7 - 1);
+              const now = new Date();
+              const startT = new Date(p.startDate + 'T00:00:00').getTime();
+              const endT = endD.getTime() + 86400000;
+              const isActive = now.getTime() >= startT && now.getTime() < endT;
+              const isPast = now.getTime() >= endT;
               const periodWeeks = weeks.filter(w => w.periodId === p.id);
+              const currentWeek = periodWeeks.find(w => {
+                return now.getTime() >= w.startDate.getTime() && now.getTime() < w.endDate.getTime();
+              });
               return (
-                <div key={p.id} className="bg-gray-50 rounded-xl p-3 border border-gray-200">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-bold text-gray-700">{p.label}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {p.startDate} ~ {endD.getFullYear()}/{endD.getMonth() + 1}/{endD.getDate()}（{p.weeks} 週）
-                      </p>
-                      {plan && !plan.isMain && (
-                        <span className="inline-block mt-1 text-[10px] bg-[#efa93b]/20 text-[#c05828] px-1.5 py-0.5 rounded">延伸課程</span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => removePeriod(p.id)}
-                      className="text-xs text-gray-400 px-2 py-1 rounded-lg active:bg-gray-200"
-                    >
-                      ✕
-                    </button>
+                <div key={p.id} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg ${isActive ? 'bg-[#FFF3E8]' : 'bg-gray-50'}`}>
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-[#d0502a] animate-pulse' : isPast ? 'bg-gray-300' : 'bg-gray-200'}`} />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-medium text-gray-700">{p.label}</span>
+                    <span className="text-[10px] text-gray-400 ml-1.5">
+                      {p.startDate.slice(5)} ~ {endD.getMonth() + 1}/{endD.getDate()}
+                    </span>
                   </div>
-                  {/* Per-period export button */}
-                  {periodWeeks.length >= 2 && (
+                  <div className="shrink-0">
+                    {isActive && currentWeek && (
+                      <span className="text-[10px] font-bold text-[#d0502a]">W{currentWeek.weekNum}</span>
+                    )}
+                    {isPast && <span className="text-[10px] text-gray-400">已完成</span>}
+                    {!isActive && !isPast && <span className="text-[10px] text-gray-400">未開始</span>}
+                  </div>
+                  {/* Quick export for completed periods */}
+                  {isPast && periodWeeks.length >= 2 && (
                     <button
                       onClick={() => handleExportPeriod(p)}
                       disabled={exportingProgram === p.id}
-                      className="w-full mt-2 py-2 text-xs font-semibold text-white rounded-lg disabled:opacity-50"
-                      style={{ background: 'linear-gradient(135deg, #d0502a, #efa93b)' }}
+                      className="text-[10px] font-semibold text-[#d0502a] px-2 py-0.5 rounded bg-[#FFF3E8] active:bg-[#FFE8D6] disabled:opacity-50 shrink-0"
                     >
-                      {exportingProgram === p.id ? '匯出中...' : `📤 匯出 ${p.label} 總覽（${periodWeeks.length} 週）`}
+                      {exportingProgram === p.id ? '...' : '匯出'}
                     </button>
                   )}
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {showSettings && (
+          <div className="mt-3 pt-3 border-t border-gray-100 flex flex-col gap-3">
+            {/* Existing periods with timeline */}
+            {periods.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs text-gray-500 font-medium">已設定的課程</p>
+                {periods.map((p) => {
+                  const plan = COURSE_PLANS.find(c => c.id === p.planId);
+                  const endD = new Date(p.startDate + 'T00:00:00');
+                  endD.setDate(endD.getDate() + p.weeks * 7 - 1);
+                  const periodWeeks = weeks.filter(w => w.periodId === p.id);
+                  return (
+                    <div key={p.id} className={`rounded-xl p-3 border ${plan?.isMain ? 'bg-[#FFF8F0] border-[#efa93b]/30' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-bold text-gray-700">{p.label}</p>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${plan?.isMain ? 'bg-[#d0502a]/10 text-[#d0502a]' : 'bg-[#efa93b]/20 text-[#c05828]'}`}>
+                              {plan?.isMain ? '主方案' : '延長方案'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {p.startDate} ~ {endD.getFullYear()}/{endD.getMonth() + 1}/{endD.getDate()}（{p.weeks} 週）
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => removePeriod(p.id)}
+                          className="text-xs text-gray-400 px-2 py-1 rounded-lg active:bg-gray-200"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      {periodWeeks.length >= 2 && (
+                        <button
+                          onClick={() => handleExportPeriod(p)}
+                          disabled={exportingProgram === p.id}
+                          className="w-full mt-2 py-2 text-xs font-semibold text-white rounded-lg disabled:opacity-50"
+                          style={{ background: 'linear-gradient(135deg, #d0502a, #efa93b)' }}
+                        >
+                          {exportingProgram === p.id ? '匯出中...' : `📤 匯出 ${p.label} 總覽（${periodWeeks.length} 週）`}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Add new period */}
             {!addingPeriod ? (
@@ -586,24 +657,49 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
               </button>
             ) : (
               <div className="bg-[#FFF8F0] rounded-xl p-3 border border-[#efa93b]/30 flex flex-col gap-3">
-                <p className="text-xs text-gray-500 font-medium">選擇方案</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {COURSE_PLANS.map((plan) => (
-                    <button
-                      key={plan.id}
-                      onClick={() => setNewPlanId(plan.id)}
-                      className={`p-2.5 rounded-xl text-left transition-all border ${
-                        newPlanId === plan.id
-                          ? 'border-[#d0502a] bg-[#FFF3E8]'
-                          : 'border-gray-200 bg-white active:bg-gray-50'
-                      }`}
-                    >
-                      <p className={`text-xs font-bold ${newPlanId === plan.id ? 'text-[#d0502a]' : 'text-gray-700'}`}>
-                        {plan.label}
-                      </p>
-                      <p className="text-xs text-gray-400">{plan.desc}</p>
-                    </button>
-                  ))}
+                {/* Main plans */}
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-2">主方案</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {COURSE_PLANS.filter(p => p.isMain).map((plan) => (
+                      <button
+                        key={plan.id}
+                        onClick={() => setNewPlanId(plan.id)}
+                        className={`p-2.5 rounded-xl text-left transition-all border ${
+                          newPlanId === plan.id
+                            ? 'border-[#d0502a] bg-[#FFF3E8]'
+                            : 'border-gray-200 bg-white active:bg-gray-50'
+                        }`}
+                      >
+                        <p className={`text-xs font-bold ${newPlanId === plan.id ? 'text-[#d0502a]' : 'text-gray-700'}`}>
+                          {plan.label}
+                        </p>
+                        <p className="text-xs text-gray-400">{plan.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Extension plans */}
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-2">延長方案</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {COURSE_PLANS.filter(p => !p.isMain).map((plan) => (
+                      <button
+                        key={plan.id}
+                        onClick={() => setNewPlanId(plan.id)}
+                        className={`p-2.5 rounded-xl text-left transition-all border ${
+                          newPlanId === plan.id
+                            ? 'border-[#efa93b] bg-[#FFFBF0]'
+                            : 'border-gray-200 bg-white active:bg-gray-50'
+                        }`}
+                      >
+                        <p className={`text-xs font-bold ${newPlanId === plan.id ? 'text-[#c05828]' : 'text-gray-700'}`}>
+                          {plan.label}
+                        </p>
+                        <p className="text-xs text-gray-400">{plan.desc}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 font-medium mb-2">
@@ -614,19 +710,31 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
                     value={newStartDate}
                     onChange={(e) => setNewStartDate(e.target.value)}
                     className="w-full p-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
+                    style={{ fontSize: '16px' }}
                   />
+                  {newPlanId && newStartDate && (() => {
+                    const plan = COURSE_PLANS.find(p => p.id === newPlanId);
+                    if (!plan) return null;
+                    const end = new Date(newStartDate + 'T00:00:00');
+                    end.setDate(end.getDate() + plan.weeks * 7 - 1);
+                    return (
+                      <p className="text-xs text-gray-400 mt-1.5">
+                        結束日：{end.getFullYear()}/{end.getMonth() + 1}/{end.getDate()}
+                      </p>
+                    );
+                  })()}
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => { setAddingPeriod(false); setNewPlanId(null); setNewStartDate(''); }}
-                    className="flex-1 py-2 text-xs text-gray-500 rounded-lg bg-gray-100 active:bg-gray-200"
+                    className="flex-1 py-2.5 text-xs text-gray-500 rounded-lg bg-gray-100 active:bg-gray-200"
                   >
                     取消
                   </button>
                   <button
                     onClick={addPeriod}
                     disabled={!newPlanId || !newStartDate}
-                    className="flex-1 py-2 text-xs font-bold text-white rounded-lg bg-[#d0502a] disabled:opacity-40 active:opacity-85"
+                    className="flex-1 py-2.5 text-xs font-bold text-white rounded-lg bg-[#d0502a] disabled:opacity-40 active:opacity-85"
                   >
                     確認新增
                   </button>

@@ -110,6 +110,15 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
     clearBehaviorDraft();
   };
 
+  // Warn before closing if there's unsaved data
+  // IMPORTANT: This useEffect MUST be above any conditional return to respect React Hooks rules
+  useEffect(() => {
+    if (!hasAnyValue || cardImageUrl) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasAnyValue, cardImageUrl]);
+
   if (cardImageUrl) {
     const hasValidImage = cardImageUrl !== 'error';
     return (
@@ -133,14 +142,6 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
       </div>
     );
   }
-
-  // Warn before closing if there's unsaved data
-  useEffect(() => {
-    if (!hasAnyValue) return;
-    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [hasAnyValue]);
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-6">

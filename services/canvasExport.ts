@@ -5,15 +5,15 @@ const CARD_WIDTH = 1080;
 const PAD = 48;
 const BRAND_FONT_SIZE = 28;
 const TITLE_FONT_SIZE = 34;
-const CHIP_FONT_SIZE = 34;    // meal card chip text (enlarged for nutritionist readability)
-const BEHAVIOR_FONT_SIZE = 28; // behavior card row text
-const NOTE_FONT_SIZE = 24;
+const CHIP_FONT_SIZE = 38;    // meal card chip text (enlarged for nutritionist readability)
+const BEHAVIOR_FONT_SIZE = 32; // behavior card row text
+const NOTE_FONT_SIZE = 26;
 const LINE_HEIGHT = 1.6;
 const CHIP_PADDING_H = 24;
 const CHIP_PADDING_V = 12;
 const CHIP_GAP = 10;
 const CHIP_RADIUS = 14;
-const ROW_HEIGHT = 72;
+const ROW_HEIGHT = 80;
 
 const BRAND_PRIMARY = '#d0502a';
 const BRAND_GOLD = '#efa93b';
@@ -781,113 +781,176 @@ function drawTableRow(
   }
 }
 
-// ─── Program Summary (multi-week trend) ──────────────────────────────────────
+// ─── Program Summary (multi-week trend with behavior metrics table) ─────────
+
+interface ProgramWeekData {
+  weekNum: number;
+  startDate: Date;
+  avgWater: number | null;
+  exerciseDays: number;
+  avgSteps: number | null;
+  avgProtein: number | null;
+  bowelRatio: string | null;      // e.g. "5/7"
+  sleepGoodRatio: string | null;  // e.g. "4/7"
+  mealCount: number;
+  behaviorCount: number;
+  recordDays: number;
+}
 
 interface ProgramSummaryInput {
-  weeks: Array<{
-    weekNum: number;
-    startDate: Date;
-    avgWater: number | null;
-    exerciseDays: number;
-    mealCount: number;
-    behaviorCount: number;
-    recordDays: number;
-  }>;
+  weeks: ProgramWeekData[];
   totalWeeks: number;
+  planLabel?: string;
   userName?: string | null;
 }
 
 export async function composeProgramSummary(input: ProgramSummaryInput): Promise<string> {
-  const { weeks, totalWeeks, userName } = input;
+  const { weeks, totalWeeks, planLabel, userName } = input;
   const CARD_W = 1080;
-  const BAR_AREA_W = CARD_W - PAD * 2 - 60;
-  const BAR_H = 28;
-  const BAR_GAP = 8;
 
-  const headerH = 120;
-  const chartH = weeks.length * (BAR_H + BAR_GAP) + 40;
-  const statsH = 120;
+  // Table dimensions
+  const T_PAD = PAD;
+  const COL_HEADER_W = 140;
+  const COL_W = Math.min(90, Math.floor((CARD_W - T_PAD * 2 - COL_HEADER_W) / Math.max(weeks.length, 1)));
+  const TABLE_W = COL_HEADER_W + COL_W * weeks.length;
+  const ROW_H = 48;
+
+  // Metrics rows
+  const metricLabels = ['📅 記錄天數', '🍽 飲食筆數', '📋 行為筆數', '💧 平均喝水', '🥛 高蛋白', '🏃 運動天數', '🚶 平均步數', '😴 好眠比', '🚽 排便比'];
+  const metricCount = metricLabels.length;
+
+  const headerH = 130;
+  const tableHeaderH = 44;
+  const tableH = tableHeaderH + metricCount * ROW_H;
+  const statsH = 100;
   const footerH = 60;
-  const totalH = headerH + chartH + statsH + footerH + PAD * 2;
+  const totalH = headerH + tableH + 24 + statsH + footerH + T_PAD * 2;
 
   const canvas = document.createElement('canvas');
   canvas.width = CARD_W;
-  canvas.height = totalH;
-  const ctx = canvas.getContext('2d')!;
+  canvas.height = totalH + 200; // buffer
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D context not available');
 
   // Dark background
   ctx.fillStyle = '#1a1a2e';
-  ctx.fillRect(0, 0, CARD_W, totalH);
+  ctx.fillRect(0, 0, CARD_W, canvas.height);
 
-  let y = PAD;
+  let y = T_PAD;
 
   // Accent line
-  const ag = ctx.createLinearGradient(PAD, 0, CARD_W - PAD, 0);
+  const ag = ctx.createLinearGradient(T_PAD, 0, CARD_W - T_PAD, 0);
   ag.addColorStop(0, BRAND_PRIMARY);
   ag.addColorStop(1, BRAND_GOLD);
   ctx.fillStyle = ag;
-  ctx.fillRect(PAD, y, CARD_W - PAD * 2, 3);
+  ctx.fillRect(T_PAD, y, CARD_W - T_PAD * 2, 3);
   y += 20;
 
   // Title
   ctx.textBaseline = 'top';
   ctx.font = `bold 34px Georgia, "Times New Roman", serif`;
   ctx.fillStyle = BRAND_GOLD;
-  ctx.fillText('BeBetter', PAD, y);
+  ctx.fillText('BeBetter', T_PAD, y);
   const bw2 = ctx.measureText('BeBetter').width;
   ctx.font = `bold 30px "Noto Sans TC", sans-serif`;
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillText(` ${totalWeeks} 週課程總覽`, PAD + bw2, y + 2);
+  const titleText = planLabel ? ` ${planLabel} · ${totalWeeks} 週總覽` : ` ${totalWeeks} 週課程總覽`;
+  ctx.fillText(titleText, T_PAD + bw2, y + 2);
   y += 44;
 
   if (userName) {
     ctx.font = `22px "Noto Sans TC", sans-serif`;
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.fillText(userName, PAD, y);
+    ctx.fillText(userName, T_PAD, y);
     y += 30;
   }
-  y += 12;
+  y += 16;
 
-  // Bar chart: each week shows record days as bar
-  const maxRecordDays = 7;
+  // Behavior metrics table
+  const tableX = (CARD_W - TABLE_W) / 2;
+
+  // Table header: week numbers
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.beginPath();
+  safeRoundRect(ctx, tableX, y, TABLE_W, tableHeaderH, [8, 8, 0, 0]);
+  ctx.fill();
+
+  ctx.fillStyle = BRAND_GOLD;
   ctx.font = `bold 18px "Noto Sans TC", sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.fillText('指標 \\ 週次', tableX + 12, y + tableHeaderH / 2);
 
-  for (const w of weeks) {
-    // Week label
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`W${w.weekNum}`, PAD, y + BAR_H / 2);
-
-    // Bar background
-    const barX = PAD + 50;
-    ctx.fillStyle = 'rgba(255,255,255,0.07)';
-    ctx.beginPath();
-    safeRoundRect(ctx, barX, y, BAR_AREA_W, BAR_H, 6);
-    ctx.fill();
-
-    // Filled bar
-    const ratio = w.recordDays / maxRecordDays;
-    if (ratio > 0) {
-      const barGrad = ctx.createLinearGradient(barX, 0, barX + BAR_AREA_W * ratio, 0);
-      barGrad.addColorStop(0, BRAND_PRIMARY);
-      barGrad.addColorStop(1, BRAND_GOLD);
-      ctx.fillStyle = barGrad;
-      ctx.beginPath();
-      safeRoundRect(ctx, barX, y, BAR_AREA_W * ratio, BAR_H, 6);
-      ctx.fill();
-    }
-
-    // Stats text inside bar
+  for (let i = 0; i < weeks.length; i++) {
+    const cx = tableX + COL_HEADER_W + i * COL_W + COL_W / 2;
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = `14px "Noto Sans TC", sans-serif`;
-    const statText = `${w.recordDays}/7天  🍽${w.mealCount}  📋${w.behaviorCount}${w.avgWater != null ? `  💧${w.avgWater}ml` : ''}  🏃${w.exerciseDays}天`;
-    ctx.fillText(statText, barX + 10, y + BAR_H / 2);
+    ctx.font = `bold 16px "Noto Sans TC", sans-serif`;
+    const label = `W${weeks[i].weekNum}`;
+    const tw = ctx.measureText(label).width;
+    ctx.fillText(label, cx - tw / 2, y + tableHeaderH / 2);
+  }
+  y += tableHeaderH;
 
-    ctx.font = `bold 18px "Noto Sans TC", sans-serif`;
-    y += BAR_H + BAR_GAP;
+  // Build metric values per week
+  const metricValues: (string | null)[][] = weeks.map(w => [
+    `${w.recordDays}/7`,
+    `${w.mealCount}`,
+    `${w.behaviorCount}`,
+    w.avgWater != null ? `${w.avgWater}` : null,
+    w.avgProtein != null ? `${w.avgProtein}杯` : null,
+    `${w.exerciseDays}天`,
+    w.avgSteps != null ? `${Math.round(w.avgSteps / 1000)}k` : null,
+    w.sleepGoodRatio,
+    w.bowelRatio,
+  ]);
+
+  for (let ri = 0; ri < metricCount; ri++) {
+    const isAlt = ri % 2 === 0;
+    ctx.fillStyle = isAlt ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)';
+    ctx.fillRect(tableX, y, TABLE_W, ROW_H);
+
+    // Bottom border
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(tableX, y + ROW_H);
+    ctx.lineTo(tableX + TABLE_W, y + ROW_H);
+    ctx.stroke();
+
+    // Row label
+    ctx.textBaseline = 'middle';
+    ctx.font = `bold 16px "Noto Sans TC", sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillText(metricLabels[ri], tableX + 12, y + ROW_H / 2);
+
+    // Values
+    ctx.font = `15px "Noto Sans TC", sans-serif`;
+    for (let wi = 0; wi < weeks.length; wi++) {
+      const val = metricValues[wi][ri];
+      const cx = tableX + COL_HEADER_W + wi * COL_W + COL_W / 2;
+      const text = val ?? '—';
+      ctx.fillStyle = val ? '#E5E7EB' : 'rgba(255,255,255,0.2)';
+      const tw = ctx.measureText(text).width;
+      ctx.fillText(text, cx - tw / 2, y + ROW_H / 2);
+
+      // Vertical divider
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(tableX + COL_HEADER_W + wi * COL_W, y);
+      ctx.lineTo(tableX + COL_HEADER_W + wi * COL_W, y + ROW_H);
+      ctx.stroke();
+    }
+    y += ROW_H;
   }
 
-  y += 16;
+  // Table border
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  safeRoundRect(ctx, tableX, y - metricCount * ROW_H - tableHeaderH, TABLE_W, tableHeaderH + metricCount * ROW_H, 8);
+  ctx.stroke();
+
+  y += 24;
 
   // Overall stats
   const totalRecordDays = weeks.reduce((s, w) => s + w.recordDays, 0);
@@ -900,13 +963,13 @@ export async function composeProgramSummary(input: ProgramSummaryInput): Promise
 
   ctx.fillStyle = 'rgba(255,255,255,0.07)';
   ctx.beginPath();
-  safeRoundRect(ctx, PAD, y, CARD_W - PAD * 2, 80, 12);
+  safeRoundRect(ctx, T_PAD, y, CARD_W - T_PAD * 2, 80, 12);
   ctx.fill();
 
   ctx.textBaseline = 'top';
   ctx.font = `bold 22px "Noto Sans TC", sans-serif`;
   ctx.fillStyle = BRAND_GOLD;
-  ctx.fillText('🏆 整期成果', PAD + 16, y + 12);
+  ctx.fillText('🏆 整期成果', T_PAD + 16, y + 12);
 
   ctx.font = `20px "Noto Sans TC", sans-serif`;
   ctx.fillStyle = '#FFFFFF';
@@ -918,23 +981,25 @@ export async function composeProgramSummary(input: ProgramSummaryInput): Promise
     overallAvgWater != null ? `💧 均${overallAvgWater}ml` : '',
     `🏃 ${totalExercise} 天`,
   ].filter(Boolean).join('  |  ');
-  ctx.fillText(summaryLine, PAD + 16, y + 46);
+  ctx.fillText(summaryLine, T_PAD + 16, y + 46);
   y += 96;
 
   // Footer
   ctx.fillStyle = ag;
-  ctx.fillRect(PAD, y, CARD_W - PAD * 2, 2);
+  ctx.fillRect(T_PAD, y, CARD_W - T_PAD * 2, 2);
   y += 12;
   ctx.font = `18px Georgia, "Times New Roman", serif`;
   ctx.fillStyle = BRAND_GOLD;
   ctx.globalAlpha = 0.6;
-  ctx.fillText('BeBetter — 陪你成為更好的自己', PAD, y);
+  ctx.fillText('BeBetter — 陪你成為更好的自己', T_PAD, y);
   ctx.globalAlpha = 1;
   y += 36;
 
   const out = document.createElement('canvas');
   out.width = CARD_W;
   out.height = y;
-  out.getContext('2d')!.drawImage(canvas, 0, 0);
+  const outCtx = out.getContext('2d');
+  if (!outCtx) throw new Error('Canvas 2D context not available');
+  outCtx.drawImage(canvas, 0, 0, CARD_W, y, 0, 0, CARD_W, y);
   return out.toDataURL('image/jpeg', 0.92);
 }
