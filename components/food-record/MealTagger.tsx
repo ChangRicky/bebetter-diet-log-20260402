@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FOOD_TAGS, MEAL_TYPES, snapToHalf } from '../../constants';
+import { FOOD_TAGS, MEAL_TYPES, snapToHalf, sortTags } from '../../constants';
 import { saveMealDraft, loadMealDraft, clearMealDraft } from '../../services/draftStorage';
 import type { MealType, FoodTag, FoodItem, FoodTagEntry } from '../../types';
 
@@ -87,7 +87,9 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
   const canDone = items.some(item => item.name.trim() !== '' && item.tags.length > 0);
 
   const handleDone = () => {
-    const validItems = items.filter(item => item.name.trim() !== '' && item.tags.length > 0);
+    const validItems = items
+      .filter(item => item.name.trim() !== '' && item.tags.length > 0)
+      .map(item => ({ ...item, tags: sortTags(item.tags) }));
     clearMealDraft();
     onComplete({ mealType, items: validItems, note });
   };
@@ -132,9 +134,9 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
         )}
       </div>
 
-      {/* Auto-save indicator */}
-      {items.some(i => i.name.trim()) && (
-        <p className="text-xs text-green-500 text-center">💾 已自動暫存</p>
+      {/* Auto-save indicator — only show once user has meaningfully started filling in data */}
+      {items.some(i => i.name.trim() && i.tags.length > 0) && (
+        <p className="text-xs text-green-500 text-center">💾 已自動暫存，關掉再回來不會消失</p>
       )}
 
       {/* Meal type */}
@@ -206,10 +208,10 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
                 })}
               </div>
 
-              {/* Row 3: Selected tags with qty steppers */}
+              {/* Row 3: Selected tags with qty steppers — always in standard order */}
               {item.tags.length > 0 && (
                 <div className="flex flex-col gap-2.5 mt-2 pt-2 border-t border-gray-100">
-                  {item.tags.map((entry) => (
+                  {sortTags(item.tags).map((entry) => (
                     <div key={entry.tag} className="flex items-center justify-between">
                       <span className="text-base text-gray-700 font-semibold">{entry.tag}</span>
                       <div className="flex items-center gap-1.5 bg-gray-50 rounded-xl px-1.5 py-1">

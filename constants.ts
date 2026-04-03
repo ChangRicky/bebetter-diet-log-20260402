@@ -1,8 +1,21 @@
-import type { FoodTag, MealType, SleepLevel, SleepQuality, BowelCount } from './types';
+import type { FoodTag, FoodTagEntry, MealType, SleepLevel, SleepQuality, BowelCount } from './types';
 
+/** 六大類標準排序 — UI 選擇按鈕也按此順序 */
 export const FOOD_TAGS: FoodTag[] = [
-  '全穀雜糧', '低脂肉', '中脂肉', '高脂肉', '蔬菜', '水果', '乳製品', '油脂',
+  '全穀雜糧', '水果', '乳製品', '低脂肉', '中脂肉', '高脂肉', '蔬菜', '油脂',
 ];
+
+/** 六大類排序優先級 (索引越小越前面) */
+export const TAG_ORDER: Record<string, number> = Object.fromEntries(
+  FOOD_TAGS.map((tag, i) => [tag, i])
+);
+
+/** 按照標準順序排列 tags */
+export function sortTags(tags: FoodTagEntry[]): FoodTagEntry[];
+export function sortTags<T extends { tag: string }>(tags: T[]): T[];
+export function sortTags(tags: { tag: string }[]) {
+  return [...tags].sort((a, b) => (TAG_ORDER[a.tag] ?? 99) - (TAG_ORDER[b.tag] ?? 99));
+}
 
 export const MEAL_TYPES: MealType[] = ['早餐', '午餐', '晚餐', '點心'];
 

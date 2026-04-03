@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { composeMealCard, composeBehaviorCard, composeWeeklyReport, composeProgramSummary } from '../../services/canvasExport';
 import { getLiffUserName } from '../../services/liffService';
 import { saveMealDraft, setDuplicatedImage } from '../../services/draftStorage';
+import { sortTags } from '../../constants';
 import type { AppRecord, MealRecord, BehaviorRecord } from '../../types';
 
 interface HistoryViewerProps {
@@ -129,7 +130,7 @@ const MealCard: React.FC<{ record: MealRecord; onDuplicate?: () => void }> = ({ 
           <div className="flex flex-wrap gap-1 mt-1">
             {record.items.map((item, i) => (
               <span key={i} className="text-xs bg-gray-50 text-gray-600 px-2 py-0.5 rounded-full border border-gray-100">
-                {item.name || '食物'}：{Array.isArray(item.tags) ? item.tags.map(t => `${t.tag}${t.qty}份`).join(' ') : ''}
+                {item.name || '食物'}：{Array.isArray(item.tags) ? sortTags(item.tags).map(t => `${t.tag}${t.qty}份`).join(' ') : ''}
               </span>
             ))}
           </div>
@@ -200,34 +201,68 @@ const BehaviorCard: React.FC<{ record: BehaviorRecord }> = ({ record }) => {
 const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 
 interface WeekData {
-  weekNum: number;
+  weekNum: number;        // 0 = practice week, 1+ = official
   startDate: Date;
   endDate: Date;
   records: AppRecord[];
   mealCount: number;
   behaviorCount: number;
+  isPractice: boolean;
 }
 
-function buildWeeks(records: AppRecord[]): WeekData[] {
+const COURSE_START_KEY = 'bebetter_course_start';
+
+function getCourseStart(): string | null {
+  return localStorage.getItem(COURSE_START_KEY);
+}
+
+function setCourseStart(dateStr: string | null) {
+  if (dateStr) localStorage.setItem(COURSE_START_KEY, dateStr);
+  else localStorage.removeItem(COURSE_START_KEY);
+}
+
+function buildWeeks(records: AppRecord[], courseStart: string | null): WeekData[] {
   if (records.length === 0) return [];
   const sorted = [...records].sort((a, b) => a.timestamp - b.timestamp);
-  const first = new Date(sorted[0].timestamp);
-  first.setHours(0, 0, 0, 0);
-  const dow = first.getDay();
-  const firstMon = new Date(first);
-  firstMon.setDate(firstMon.getDate() - ((dow + 6) % 7));
-
-  const now = new Date();
   const weekMs = 7 * 24 * 60 * 60 * 1000;
-  const total = Math.min(Math.ceil((now.getTime() - firstMon.getTime()) / weekMs), 20);
+  const now = new Date();
+
+  // Determine the Monday of the official start week
+  let officialMon: Date;
+  if (courseStart) {
+    const cs = new Date(courseStart + 'T00:00:00');
+    const dow = cs.getDay();
+    officialMon = new Date(cs);
+    officialMon.setDate(officialMon.getDate() - ((dow + 6) % 7));
+  } else {
+    // Fall back to first record's week
+    const first = new Date(sorted[0].timestamp);
+    first.setHours(0, 0, 0, 0);
+    const dow = first.getDay();
+    officialMon = new Date(first);
+    officialMon.setDate(officialMon.getDate() - ((dow + 6) % 7));
+  }
+
+  // Find the earliest record's Monday
+  const firstRec = new Date(sorted[0].timestamp);
+  firstRec.setHours(0, 0, 0, 0);
+  const fd = firstRec.getDay();
+  const firstRecMon = new Date(firstRec);
+  firstRecMon.setDate(firstRecMon.getDate() - ((fd + 6) % 7));
+
+  const earliestMon = firstRecMon < officialMon ? firstRecMon : officialMon;
+
+  const total = Math.min(Math.ceil((now.getTime() - earliestMon.getTime()) / weekMs), 30);
 
   const weeks: WeekData[] = [];
   for (let i = 0; i < total; i++) {
-    const s = new Date(firstMon.getTime() + i * weekMs);
+    const s = new Date(earliestMon.getTime() + i * weekMs);
     const e = new Date(s.getTime() + weekMs);
     const wr = records.filter(r => r.timestamp >= s.getTime() && r.timestamp < e.getTime());
+    const isPractice = s.getTime() < officialMon.getTime();
+    const weekNum = isPractice ? 0 : Math.round((s.getTime() - officialMon.getTime()) / weekMs) + 1;
     weeks.push({
-      weekNum: i + 1, startDate: s, endDate: e, records: wr,
+      weekNum, startDate: s, endDate: e, records: wr, isPractice,
       mealCount: wr.filter(r => r.type === 'meal').length,
       behaviorCount: wr.filter(r => r.type === 'behavior').length,
     });
@@ -248,7 +283,11 @@ function groupByDate(records: AppRecord[]): Map<string, AppRecord[]> {
 }
 
 const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
-  const weeks = buildWeeks(records);
+  const [courseStart, setCourseStartState] = useState<string | null>(getCourseStart);
+  const [showSettings, setShowSettings] = useState(false);
+  const weeks = buildWeeks(records, courseStart);
+  const officialWeeks = weeks.filter(w => !w.isPractice);
+  const practiceWeeks = weeks.filter(w => w.isPractice);
   const [expandedWeek, setExpandedWeek] = useState<number | null>(weeks.length > 0 ? weeks[weeks.length - 1].weekNum : null);
   const [exportingWeek, setExportingWeek] = useState<number | null>(null);
   const [exportingProgram, setExportingProgram] = useState(false);
@@ -269,11 +308,13 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
         const dayIdx = (d.getDay() + 6) % 7;
         mealCounts[dayIdx]++;
       }
+      const meals = week.records.filter(r => r.type === 'meal') as MealRecord[];
       const url = await composeWeeklyReport({
         weekNum: week.weekNum,
         startDate: week.startDate,
         endDate: week.endDate,
         behaviorRecords: behaviors,
+        mealRecords: meals,
         mealCounts,
         userName,
       });
@@ -301,8 +342,8 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
           })).size,
         };
       });
-      const url = await composeProgramSummary({ weeks: weekData, totalWeeks: weeks.length, userName });
-      downloadImage(url, `BeBetter-${weeks.length}週總覽.jpg`);
+      const url = await composeProgramSummary({ weeks: weekData, totalWeeks: officialWeeks.length, userName });
+      downloadImage(url, `BeBetter-${officialWeeks.length}週總覽.jpg`);
     } catch { /* ignore */ }
     setExportingProgram(false);
   };
@@ -346,35 +387,80 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
         </p>
       </div>
 
+      {/* Course start date setting */}
+      <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-gray-600">
+            {courseStart
+              ? `📅 課程起始日：${courseStart}`
+              : '📅 尚未設定課程起始日'}
+          </div>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="text-xs text-[#d0502a] font-medium px-3 py-1.5 rounded-lg bg-[#FFF3E8] active:bg-[#FFE8D6]"
+          >
+            {showSettings ? '收合' : '設定'}
+          </button>
+        </div>
+        {showSettings && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <p className="text-xs text-gray-400 mb-2">
+              設定課程正式開始日期，之前的記錄會標記為「練習週」
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={courseStart || ''}
+                onChange={(e) => {
+                  const val = e.target.value || null;
+                  setCourseStart(val);
+                  setCourseStartState(val);
+                }}
+                className="flex-1 p-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
+              />
+              {courseStart && (
+                <button
+                  onClick={() => { setCourseStart(null); setCourseStartState(null); }}
+                  className="text-xs text-gray-500 px-3 py-2 rounded-lg bg-gray-100"
+                >
+                  清除
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Export program summary button */}
-      {weeks.length >= 2 && (
+      {officialWeeks.length >= 2 && (
         <button
           onClick={handleExportProgram}
           disabled={exportingProgram}
           className="w-full py-3 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
           style={{ background: 'linear-gradient(135deg, #d0502a, #efa93b)' }}
         >
-          {exportingProgram ? '匯出中...' : `📤 匯出整期總覽（${weeks.length} 週）`}
+          {exportingProgram ? '匯出中...' : `📤 匯出整期總覽（${officialWeeks.length} 週）`}
         </button>
       )}
 
       {/* Expandable weekly archive — latest first */}
-      {[...weeks].reverse().map((week) => {
-        const isOpen = expandedWeek === week.weekNum;
+      {[...weeks].reverse().map((week, idx) => {
+        const weekKey = week.isPractice ? `practice-${idx}` : `w${week.weekNum}`;
+        const isOpen = expandedWeek === week.weekNum && (!week.isPractice || expandedWeek === 0);
         const fmtDate = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
         const dailyMap = groupByDate(week.records);
-        const completionRate = Math.round((week.records.length > 0 ? 1 : 0) * 100);
+        const weekLabel = week.isPractice ? '練習' : `W${week.weekNum}`;
 
         return (
-          <div key={week.weekNum} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div key={weekKey} className={`bg-white rounded-xl shadow-sm border overflow-hidden ${week.isPractice ? 'border-gray-200 opacity-80' : 'border-gray-100'}`}>
             {/* Week header — clickable */}
             <button
               onClick={() => setExpandedWeek(isOpen ? null : week.weekNum)}
               className="w-full flex items-center justify-between p-3 active:bg-gray-50"
             >
               <div className="flex items-center gap-2">
-                <span className="bg-[#d0502a] text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                  W{week.weekNum}
+                <span className={`text-white text-xs font-bold px-2 py-0.5 rounded-full ${week.isPractice ? 'bg-gray-400' : 'bg-[#d0502a]'}`}>
+                  {weekLabel}
                 </span>
                 <span className="text-sm font-medium text-gray-700">
                   {fmtDate(week.startDate)} ~ {fmtDate(new Date(week.endDate.getTime() - 86400000))}
@@ -415,14 +501,16 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
                     {/* Week summary stats */}
                     <WeekStats records={week.records} />
 
-                    {/* Export week report button */}
-                    <button
-                      onClick={() => handleExportWeek(week)}
-                      disabled={exportingWeek === week.weekNum}
-                      className="w-full mt-1 py-2.5 text-sm font-semibold text-[#d0502a] bg-[#FFF3E8] rounded-lg active:bg-[#FFE8D6] disabled:opacity-50"
-                    >
-                      {exportingWeek === week.weekNum ? '匯出中...' : `📤 匯出 W${week.weekNum} 週報`}
-                    </button>
+                    {/* Export week report button — not for practice weeks */}
+                    {!week.isPractice && (
+                      <button
+                        onClick={() => handleExportWeek(week)}
+                        disabled={exportingWeek === week.weekNum}
+                        className="w-full mt-1 py-2.5 text-sm font-semibold text-[#d0502a] bg-[#FFF3E8] rounded-lg active:bg-[#FFE8D6] disabled:opacity-50"
+                      >
+                        {exportingWeek === week.weekNum ? '匯出中...' : `📤 匯出 W${week.weekNum} 週報`}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -441,7 +529,7 @@ const DayRecordRow: React.FC<{ record: AppRecord }> = ({ record }) => {
   if (record.type === 'meal') {
     const meal = record as MealRecord;
     const foodList = Array.isArray(meal.items)
-      ? meal.items.map(i => `${i.name}（${i.tags.map(t => `${t.tag}${t.qty}份`).join('、')}）`).join('、')
+      ? meal.items.map(i => `${i.name}（${sortTags(i.tags).map(t => `${t.tag}${t.qty}份`).join('、')}）`).join('、')
       : '';
     return (
       <div className="flex items-start gap-2">

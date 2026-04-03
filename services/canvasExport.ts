@@ -1,15 +1,15 @@
-import type { MealRecord, BehaviorRecord, FoodItem } from '../types';
-import { CARD_THEMES } from '../constants';
+import type { MealRecord, BehaviorRecord, FoodItem, FoodTag } from '../types';
+import { CARD_THEMES, sortTags, FOOD_TAGS } from '../constants';
 
 const CARD_WIDTH = 1080;
 const PAD = 48;
 const BRAND_FONT_SIZE = 28;
 const TITLE_FONT_SIZE = 34;
-const ITEM_FONT_SIZE = 28;
+const ITEM_FONT_SIZE = 34;
 const NOTE_FONT_SIZE = 24;
 const LINE_HEIGHT = 1.6;
-const CHIP_PADDING_H = 20;
-const CHIP_PADDING_V = 10;
+const CHIP_PADDING_H = 24;
+const CHIP_PADDING_V = 12;
 const CHIP_GAP = 10;
 const CHIP_RADIUS = 14;
 const ROW_HEIGHT = 72;
@@ -240,7 +240,7 @@ function layoutItemChips(ctx: CanvasRenderingContext2D, items: FoodItem[], maxWi
   const chipH = ITEM_FONT_SIZE + CHIP_PADDING_V * 2;
 
   for (const item of items) {
-    const tagParts = item.tags.map(t => `${t.tag}${fmtQty(t.qty)}`).join(' ');
+    const tagParts = sortTags(item.tags).map(t => `${t.tag}${fmtQty(t.qty)}`).join(' ');
     const label = `${item.name}：${tagParts}`;
     const w = ctx.measureText(label).width + CHIP_PADDING_H * 2;
     if (rowX + w > maxWidth && curRow.length > 0) {
@@ -481,12 +481,13 @@ interface WeeklyReportInput {
   startDate: Date;
   endDate: Date;
   behaviorRecords: BehaviorRecord[];
+  mealRecords: MealRecord[];
   mealCounts: number[]; // per day (Mon-Sun)
   userName?: string | null;
 }
 
 export async function composeWeeklyReport(input: WeeklyReportInput): Promise<string> {
-  const { weekNum, startDate, endDate, behaviorRecords, mealCounts, userName } = input;
+  const { weekNum, startDate, endDate, behaviorRecords, mealRecords, mealCounts, userName } = input;
 
   const COL_HEADER_W = 130;
   const COL_W = 120;
@@ -502,6 +503,23 @@ export async function composeWeeklyReport(input: WeeklyReportInput): Promise<str
     dayBehaviors[dayIdx] = b;
   }
 
+  // Compute average daily food tag portions
+  const tagTotals: Record<string, number> = {};
+  const tagDays = new Set<string>(); // unique days with meal records
+  for (const m of mealRecords) {
+    const d = new Date(m.timestamp);
+    tagDays.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
+    for (const item of m.items) {
+      for (const t of item.tags) {
+        tagTotals[t.tag] = (tagTotals[t.tag] || 0) + t.qty;
+      }
+    }
+  }
+  const numDays = Math.max(tagDays.size, 1);
+  const tagAverages = FOOD_TAGS
+    .map(tag => ({ tag, avg: tagTotals[tag] ? Math.round((tagTotals[tag] / numDays) * 10) / 10 : 0 }))
+    .filter(t => t.avg > 0);
+
   // Calculate height
   const headerH = 100;
   const tableHeaderH = 44;
@@ -509,8 +527,9 @@ export async function composeWeeklyReport(input: WeeklyReportInput): Promise<str
   const mealRowH = ROW_H;
   const tableH = tableHeaderH + (indicatorRows + 1) * ROW_H; // +1 for meal row
   const summaryH = 100;
+  const tagAvgH = tagAverages.length > 0 ? 100 : 0; // food tag average section
   const footerH = 60;
-  const totalH = headerH + tableH + summaryH + footerH + PAD * 2;
+  const totalH = headerH + tableH + summaryH + tagAvgH + footerH + PAD * 2;
 
   const canvas = document.createElement('canvas');
   canvas.width = CARD_W;
@@ -648,6 +667,30 @@ export async function composeWeeklyReport(input: WeeklyReportInput): Promise<str
   ].filter(Boolean).join('    ');
   ctx.fillText(stats, tableX + 16, y + 42);
   y += 86;
+
+  // Food tag daily averages
+  if (tagAverages.length > 0) {
+    ctx.fillStyle = '#F0FDF4';
+    ctx.beginPath();
+    safeRoundRect(ctx, tableX, y, TABLE_W, 80, 12);
+    ctx.fill();
+    ctx.strokeStyle = '#BBF7D0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    safeRoundRect(ctx, tableX, y, TABLE_W, 80, 12);
+    ctx.stroke();
+
+    ctx.textBaseline = 'top';
+    ctx.font = `bold 22px "Noto Sans TC", sans-serif`;
+    ctx.fillStyle = '#166534';
+    ctx.fillText(`🥗 每日平均六大類（共 ${tagDays.size} 天）`, tableX + 16, y + 12);
+
+    ctx.font = `20px "Noto Sans TC", sans-serif`;
+    ctx.fillStyle = '#374151';
+    const tagStr = tagAverages.map(t => `${t.tag} ${t.avg}份`).join('    ');
+    ctx.fillText(tagStr, tableX + 16, y + 46);
+    y += 96;
+  }
 
   // Footer
   const footGrad = ctx.createLinearGradient(0, y, CARD_W, y);
