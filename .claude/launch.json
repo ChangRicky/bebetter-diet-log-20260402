@@ -3,8 +3,9 @@
   "configurations": [
     {
       "name": "dev",
-      "runtimeExecutable": "/bin/sh",
-      "runtimeArgs": ["-c", "PATH=/usr/local/bin:$PATH /usr/local/bin/npx vite --host --port 5173"],
+      "runtimeExecutable": "/usr/local/bin/node",
+      "runtimeArgs": ["node_modules/.bin/vite", "--host", "--port", "5173"],
+      "cwd": "/Users/ricky/Downloads/bebetter-diet-log",
       "port": 5173
     }
   ]

@@ -30,6 +30,7 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
   const [sleepQuality, setSleepQuality] = useState<SleepQuality | null>((draft.current?.sleepQuality as SleepQuality) ?? null);
   const [bedtime, setBedtime] = useState(draft.current?.bedtime ?? '');
   const [bowel, setBowel] = useState<BowelCount | null>((draft.current?.bowel as BowelCount) ?? null);
+  const [bowelNote, setBowelNote] = useState(draft.current?.bowelNote ?? '');
   const [supplements, setSupplements] = useState(draft.current?.supplements ?? '');
   const [generalNote, setGeneralNote] = useState(draft.current?.generalNote ?? '');
   const [cardTheme, setCardTheme] = useState<BehaviorRecord['cardTheme']>((draft.current?.cardTheme as BehaviorRecord['cardTheme']) ?? 'dark');
@@ -43,9 +44,9 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
     saveBehaviorDraft({
       recordDate, waterMl, customWater, proteinCups, proteinGrams,
       exercise, exerciseNote, exerciseDuration, stepsCount,
-      sleep, sleepQuality, bedtime, bowel, supplements, generalNote, cardTheme,
+      sleep, sleepQuality, bedtime, bowel, bowelNote, supplements, generalNote, cardTheme,
     });
-  }, [recordDate, waterMl, customWater, proteinCups, proteinGrams, exercise, exerciseNote, exerciseDuration, stepsCount, sleep, sleepQuality, bedtime, bowel, supplements, generalNote, cardTheme, cardImageUrl]);
+  }, [recordDate, waterMl, customWater, proteinCups, proteinGrams, exercise, exerciseNote, exerciseDuration, stepsCount, sleep, sleepQuality, bedtime, bowel, bowelNote, supplements, generalNote, cardTheme, cardImageUrl]);
 
   const hasAnyValue = waterMl !== null || proteinCups !== null || exercise !== null ||
     stepsCount !== '' || sleep !== null || bowel !== null;
@@ -63,23 +64,28 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    const now = new Date();
-    const record: BehaviorRecord = {
-      id: now.toISOString(),
-      type: 'behavior',
-      timestamp: now.getTime(),
-      recordDate,
-      waterMl, proteinCups, proteinGrams,
-      exercise, exerciseNote, exerciseDuration,
-      stepsCount, sleep, sleepQuality, bedtime: bedtime || '',
-      bowel, supplements: supplements || '', generalNote, cardTheme,
-    };
-    await saveRecord(record);
-    clearBehaviorDraft();
-    const imageUrl = await composeBehaviorCard(record, getLiffUserName());
-    setCardImageUrl(imageUrl);
+    try {
+      const now = new Date();
+      const record: BehaviorRecord = {
+        id: now.toISOString(),
+        type: 'behavior',
+        timestamp: now.getTime(),
+        recordDate,
+        waterMl, proteinCups, proteinGrams,
+        exercise, exerciseNote, exerciseDuration,
+        stepsCount, sleep, sleepQuality, bedtime: bedtime || '',
+        bowel, bowelNote: bowelNote || '', supplements: supplements || '', generalNote, cardTheme,
+      };
+      await saveRecord(record);
+      clearBehaviorDraft();
+      const imageUrl = await composeBehaviorCard(record, getLiffUserName());
+      setCardImageUrl(imageUrl);
+      onRecordSaved();
+    } catch (err) {
+      console.error('Submit failed:', err);
+      alert('儲存失敗，請再試一次');
+    }
     setIsSubmitting(false);
-    onRecordSaved();
   };
 
   const reset = () => {
@@ -88,7 +94,7 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
     setProteinCups(null); setShowProteinDetail(false); setProteinGrams('');
     setExercise(null); setExerciseNote(''); setExerciseDuration('');
     setStepsCount(''); setSleep(null); setSleepQuality(null); setBedtime('');
-    setBowel(null); setSupplements(''); setGeneralNote(''); setCardTheme('dark'); setCardImageUrl(null);
+    setBowel(null); setBowelNote(''); setSupplements(''); setGeneralNote(''); setCardTheme('dark'); setCardImageUrl(null);
     clearBehaviorDraft();
   };
 
@@ -281,6 +287,16 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
             onChange={setBowel}
             colorMap={{ '沒有': 'bg-gray-400 text-white', '1次': 'bg-[#d0502a] text-white', '2次': 'bg-[#d0502a] text-white', '3次以上': 'bg-blue-500 text-white' }}
           />
+          {bowel && bowel !== '沒有' && (
+            <input
+              type="text"
+              value={bowelNote}
+              onChange={(e) => setBowelNote(e.target.value)}
+              placeholder="排便備註（例：軟便、硬便、正常）"
+              className="w-full mt-2 p-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
+              style={{ fontSize: '16px' }}
+            />
+          )}
         </Card>
 
         {/* 保健品/藥物 */}

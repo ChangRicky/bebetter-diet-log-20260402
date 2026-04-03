@@ -69,6 +69,7 @@ const App: React.FC = () => {
             records={records}
             onRecordSaved={handleRecordSaved}
             onDuplicateMeal={() => setActiveTab('meal')}
+            onDuplicateBehavior={() => setActiveTab('behavior')}
           />
         )}
       </main>

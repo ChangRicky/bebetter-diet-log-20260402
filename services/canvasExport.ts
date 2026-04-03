@@ -362,7 +362,7 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
   } else if (record.bedtime) {
     sleepVal = `${record.bedtime}就寢`;
   }
-  const bowelVal = record.bowel;
+  const bowelVal = record.bowel ? (record.bowelNote?.trim() ? `${record.bowel}（${record.bowelNote}）` : record.bowel) : null;
   const supplementsVal = record.supplements?.trim() || null;
 
   const indicatorRows = [
@@ -614,7 +614,7 @@ export async function composeWeeklyReport(input: WeeklyReportInput): Promise<str
       if (b.bedtime) s += `\n${b.bedtime}`;
       return s;
     },
-    (b: BehaviorRecord | null) => b?.bowel ?? '—',
+    (b: BehaviorRecord | null) => b?.bowel ? (b.bowelNote?.trim() ? `${b.bowel}\n${b.bowelNote}` : b.bowel) : '—',
     (b: BehaviorRecord | null) => b?.supplements?.trim() || '—',
   ];
 

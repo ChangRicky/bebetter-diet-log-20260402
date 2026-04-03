@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { composeMealCard, composeBehaviorCard, composeWeeklyReport, composeProgramSummary } from '../../services/canvasExport';
 import { getLiffUserName } from '../../services/liffService';
-import { saveMealDraft, setDuplicatedImage } from '../../services/draftStorage';
-import { sortTags } from '../../constants';
+import { saveMealDraft, saveBehaviorDraft, setDuplicatedImage } from '../../services/draftStorage';
+import { sortTags, toDateString } from '../../constants';
 import type { AppRecord, MealRecord, BehaviorRecord } from '../../types';
 
 interface HistoryViewerProps {
   records: AppRecord[];
   onRecordSaved?: () => void;
   onDuplicateMeal?: () => void;
+  onDuplicateBehavior?: () => void;
 }
 
-export const HistoryViewer: React.FC<HistoryViewerProps> = ({ records, onDuplicateMeal }) => {
+export const HistoryViewer: React.FC<HistoryViewerProps> = ({ records, onDuplicateMeal, onDuplicateBehavior }) => {
   const [filter, setFilter] = useState<'all' | 'meal' | 'behavior' | 'summary'>('all');
 
   const filtered = records
@@ -57,7 +58,7 @@ export const HistoryViewer: React.FC<HistoryViewerProps> = ({ records, onDuplica
             record.type === 'meal' ? (
               <MealCard key={record.id} record={record} onDuplicate={onDuplicateMeal} />
             ) : (
-              <BehaviorCard key={record.id} record={record} />
+              <BehaviorCard key={record.id} record={record} onDuplicate={onDuplicateBehavior} />
             )
           )}
         </div>
@@ -143,7 +144,7 @@ const MealCard: React.FC<{ record: MealRecord; onDuplicate?: () => void }> = ({ 
   );
 };
 
-const BehaviorCard: React.FC<{ record: BehaviorRecord }> = ({ record }) => {
+const BehaviorCard: React.FC<{ record: BehaviorRecord; onDuplicate?: () => void }> = ({ record, onDuplicate }) => {
   const [exporting, setExporting] = useState(false);
   const displayDate = record.recordDate || new Date(record.timestamp).toLocaleDateString('zh-TW');
 
@@ -156,13 +157,40 @@ const BehaviorCard: React.FC<{ record: BehaviorRecord }> = ({ record }) => {
     setExporting(false);
   };
 
+  const handleDuplicate = () => {
+    saveBehaviorDraft({
+      recordDate: toDateString(new Date()),
+      waterMl: record.waterMl,
+      customWater: record.waterMl != null ? String(record.waterMl) : '',
+      proteinCups: record.proteinCups,
+      proteinGrams: record.proteinGrams || '',
+      exercise: record.exercise,
+      exerciseNote: record.exerciseNote || '',
+      exerciseDuration: record.exerciseDuration || '',
+      stepsCount: record.stepsCount || '',
+      sleep: record.sleep,
+      sleepQuality: record.sleepQuality,
+      bedtime: record.bedtime || '',
+      bowel: record.bowel,
+      bowelNote: record.bowelNote || '',
+      supplements: record.supplements || '',
+      generalNote: '',
+      cardTheme: record.cardTheme || 'dark',
+    });
+    onDuplicate?.();
+  };
+
+  const bowelDisplay = record.bowel
+    ? (record.bowelNote?.trim() ? `${record.bowel}（${record.bowelNote}）` : record.bowel)
+    : null;
+
   const items = [
     { icon: '💧', label: '喝水', value: record.waterMl != null ? `${record.waterMl}ml` : null },
     { icon: '🥛', label: '蛋白', value: record.proteinCups != null ? `${record.proteinCups}杯` : null },
     { icon: '🏃', label: '運動', value: record.exercise === true ? (record.exerciseNote || '有') : record.exercise === false ? '沒有' : null },
     { icon: '🚶', label: '步數', value: record.stepsCount ? `${record.stepsCount}步` : null },
     { icon: '😴', label: '睡眠', value: record.sleep ? `${record.sleep}${record.sleepQuality ? `(${record.sleepQuality})` : ''}${record.bedtime ? ` ${record.bedtime}就寢` : ''}` : record.bedtime ? `${record.bedtime}就寢` : null },
-    { icon: '🚽', label: '排便', value: record.bowel ?? null },
+    { icon: '🚽', label: '排便', value: bowelDisplay },
     { icon: '💊', label: '保健品', value: record.supplements?.trim() || null },
   ].filter((i) => i.value != null && i.value !== 'undefined');
 
@@ -177,13 +205,21 @@ const BehaviorCard: React.FC<{ record: BehaviorRecord }> = ({ record }) => {
             {displayDate}
           </span>
         </div>
-        <button
-          onClick={handleExport}
-          disabled={exporting}
-          className="text-xs text-[#d0502a] font-medium px-2 py-1 rounded-lg bg-[#FFF3E8] active:bg-[#FFE8D6] disabled:opacity-50"
-        >
-          {exporting ? '...' : '💾 下載'}
-        </button>
+        <div className="flex gap-1.5">
+          <button
+            onClick={handleDuplicate}
+            className="text-xs text-gray-600 font-medium px-2.5 py-2 min-h-[44px] flex items-center justify-center rounded-lg bg-gray-100 active:bg-gray-200"
+          >
+            📋 複製
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="text-xs text-[#d0502a] font-medium px-2.5 py-2 min-h-[44px] flex items-center justify-center rounded-lg bg-[#FFF3E8] active:bg-[#FFE8D6] disabled:opacity-50"
+          >
+            {exporting ? '...' : '💾 下載'}
+          </button>
+        </div>
       </div>
       <div className="flex flex-wrap gap-2">
         {items.map((item) => (
@@ -211,14 +247,33 @@ interface WeekData {
 }
 
 const COURSE_START_KEY = 'bebetter_course_start';
+const COURSE_PLAN_KEY = 'bebetter_course_plan';
+
+type CoursePlan = 'standard' | 'premium' | 'loop_full' | 'loop_lite';
+
+const COURSE_PLANS: { id: CoursePlan; label: string; weeks: number; desc: string }[] = [
+  { id: 'standard', label: 'Standard 標準版', weeks: 8, desc: '8 週基礎課程' },
+  { id: 'premium', label: 'Premium 高級版', weeks: 10, desc: '10 週進階課程' },
+  { id: 'loop_full', label: 'Loop Full 延伸', weeks: 8, desc: '高級版延伸 8 週' },
+  { id: 'loop_lite', label: 'Loop Lite 延伸', weeks: 8, desc: '標準版延伸 8 週' },
+];
 
 function getCourseStart(): string | null {
   return localStorage.getItem(COURSE_START_KEY);
 }
 
+function getCoursePlan(): CoursePlan | null {
+  return localStorage.getItem(COURSE_PLAN_KEY) as CoursePlan | null;
+}
+
 function setCourseStart(dateStr: string | null) {
   if (dateStr) localStorage.setItem(COURSE_START_KEY, dateStr);
   else localStorage.removeItem(COURSE_START_KEY);
+}
+
+function setCoursePlan(plan: CoursePlan | null) {
+  if (plan) localStorage.setItem(COURSE_PLAN_KEY, plan);
+  else localStorage.removeItem(COURSE_PLAN_KEY);
 }
 
 function buildWeeks(records: AppRecord[], courseStart: string | null): WeekData[] {
@@ -284,6 +339,7 @@ function groupByDate(records: AppRecord[]): Map<string, AppRecord[]> {
 
 const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
   const [courseStart, setCourseStartState] = useState<string | null>(getCourseStart);
+  const [coursePlan, setCoursePlanState] = useState<CoursePlan | null>(getCoursePlan);
   const [showSettings, setShowSettings] = useState(false);
   const weeks = buildWeeks(records, courseStart);
   const officialWeeks = weeks.filter(w => !w.isPractice);
@@ -387,13 +443,13 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
         </p>
       </div>
 
-      {/* Course start date setting */}
+      {/* Course settings */}
       <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100">
         <div className="flex items-center justify-between">
           <div className="text-sm text-gray-600">
-            {courseStart
-              ? `📅 課程起始日：${courseStart}`
-              : '📅 尚未設定課程起始日'}
+            {coursePlan && courseStart
+              ? `📅 ${COURSE_PLANS.find(p => p.id === coursePlan)?.label} · ${courseStart} 起`
+              : '📅 尚未設定課程方案'}
           </div>
           <button
             onClick={() => setShowSettings(!showSettings)}
@@ -403,29 +459,69 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
           </button>
         </div>
         {showSettings && (
-          <div className="mt-3 pt-3 border-t border-gray-100">
-            <p className="text-xs text-gray-400 mb-2">
-              設定課程正式開始日期，之前的記錄會標記為「練習週」
-            </p>
-            <div className="flex gap-2">
-              <input
-                type="date"
-                value={courseStart || ''}
-                onChange={(e) => {
-                  const val = e.target.value || null;
-                  setCourseStart(val);
-                  setCourseStartState(val);
-                }}
-                className="flex-1 p-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
-              />
-              {courseStart && (
-                <button
-                  onClick={() => { setCourseStart(null); setCourseStartState(null); }}
-                  className="text-xs text-gray-500 px-3 py-2 rounded-lg bg-gray-100"
-                >
-                  清除
-                </button>
-              )}
+          <div className="mt-3 pt-3 border-t border-gray-100 flex flex-col gap-3">
+            {/* Plan selector */}
+            <div>
+              <p className="text-xs text-gray-500 font-medium mb-2">課程方案</p>
+              <div className="grid grid-cols-2 gap-2">
+                {COURSE_PLANS.map((plan) => (
+                  <button
+                    key={plan.id}
+                    onClick={() => { setCoursePlan(plan.id); setCoursePlanState(plan.id); }}
+                    className={`p-2.5 rounded-xl text-left transition-all border ${
+                      coursePlan === plan.id
+                        ? 'border-[#d0502a] bg-[#FFF3E8]'
+                        : 'border-gray-200 bg-white active:bg-gray-50'
+                    }`}
+                  >
+                    <p className={`text-xs font-bold ${coursePlan === plan.id ? 'text-[#d0502a]' : 'text-gray-700'}`}>
+                      {plan.label}
+                    </p>
+                    <p className="text-xs text-gray-400">{plan.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Start date */}
+            <div>
+              <p className="text-xs text-gray-500 font-medium mb-2">
+                課程起始日{coursePlan ? ` · ${COURSE_PLANS.find(p => p.id === coursePlan)?.weeks} 週` : ''}
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={courseStart || ''}
+                  onChange={(e) => {
+                    const val = e.target.value || null;
+                    setCourseStart(val);
+                    setCourseStartState(val);
+                  }}
+                  className="flex-1 p-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
+                />
+                {(courseStart || coursePlan) && (
+                  <button
+                    onClick={() => {
+                      setCourseStart(null); setCourseStartState(null);
+                      setCoursePlan(null); setCoursePlanState(null);
+                    }}
+                    className="text-xs text-gray-500 px-3 py-2 rounded-lg bg-gray-100"
+                  >
+                    清除
+                  </button>
+                )}
+              </div>
+              {courseStart && coursePlan && (() => {
+                const plan = COURSE_PLANS.find(p => p.id === coursePlan);
+                if (!plan) return null;
+                const end = new Date(courseStart + 'T00:00:00');
+                end.setDate(end.getDate() + plan.weeks * 7 - 1);
+                return (
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    課程結束日：{end.getFullYear()}/{end.getMonth() + 1}/{end.getDate()}（共 {plan.weeks} 週）
+                  </p>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -549,7 +645,7 @@ const DayRecordRow: React.FC<{ record: AppRecord }> = ({ record }) => {
   if (beh.exercise === true) parts.push(`🏃${beh.exerciseNote || '有'}${beh.exerciseDuration ? ` ${beh.exerciseDuration}分` : ''}`);
   if (beh.stepsCount) parts.push(`🚶${Number(beh.stepsCount).toLocaleString()}步`);
   if (beh.sleep) parts.push(`😴${beh.sleep}${beh.sleepQuality ? `(${beh.sleepQuality})` : ''}`);
-  if (beh.bowel) parts.push(`🚽${beh.bowel}`);
+  if (beh.bowel) parts.push(`🚽${beh.bowel}${beh.bowelNote?.trim() ? `(${beh.bowelNote})` : ''}`);
   if (beh.supplements?.trim()) parts.push(`💊${beh.supplements.trim()}`);
 
   return (
@@ -583,6 +679,16 @@ const WeekStats: React.FC<{ records: AppRecord[] }> = ({ records }) => {
   // Exercise count
   const exerciseDays = behaviors.filter(b => b.exercise === true).length;
 
+  // Average steps
+  const stepRecords = behaviors.filter(b => b.stepsCount && Number(b.stepsCount) > 0);
+  const avgSteps = stepRecords.length > 0
+    ? Math.round(stepRecords.reduce((s, b) => s + Number(b.stepsCount), 0) / stepRecords.length)
+    : null;
+
+  // Bowel summary
+  const bowelRecords = behaviors.filter(b => b.bowel != null);
+  const bowelYes = bowelRecords.filter(b => b.bowel !== '沒有').length;
+
   return (
     <div className="bg-[#FFF8F0] rounded-lg p-2.5 mt-1">
       <p className="text-xs font-semibold text-[#d0502a] mb-1">本週小結</p>
@@ -592,6 +698,8 @@ const WeekStats: React.FC<{ records: AppRecord[] }> = ({ records }) => {
         <span>📋 行為 {behaviors.length} 筆</span>
         {avgWater !== null && <span>💧 平均喝水 {avgWater}ml</span>}
         {exerciseDays > 0 && <span>🏃 運動 {exerciseDays} 天</span>}
+        {avgSteps !== null && <span>🚶 平均 {avgSteps.toLocaleString()} 步</span>}
+        {bowelRecords.length > 0 && <span>🚽 排便 {bowelYes}/{bowelRecords.length} 天</span>}
       </div>
     </div>
   );
