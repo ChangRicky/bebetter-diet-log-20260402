@@ -28,7 +28,22 @@ export interface MealDraft {
   mealType: string;
   note: string;
   showNote: boolean;
+  /** If duplicated from history, marks this as a duplicate */
+  duplicated?: boolean;
   savedAt: number;
+}
+
+/**
+ * In-memory storage for duplicated image (too large for localStorage).
+ * Set when duplicating from history, consumed by FoodRecordFlow.
+ */
+let _duplicatedImageUrl: string | null = null;
+
+export function setDuplicatedImage(url: string): void { _duplicatedImageUrl = url; }
+export function consumeDuplicatedImage(): string | null {
+  const url = _duplicatedImageUrl;
+  _duplicatedImageUrl = null;
+  return url;
 }
 
 export function saveBehaviorDraft(draft: Omit<BehaviorDraft, 'savedAt'>): void {

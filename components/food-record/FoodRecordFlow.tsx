@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { PhotoCapture } from './PhotoCapture';
 import { MealTagger } from './MealTagger';
 import { CardPreview } from './CardPreview';
 import { StepIndicator } from '../layout/StepIndicator';
 import { autoDetectMealType } from '../../constants';
 import { saveRecord } from '../../services/storage';
+import { loadMealDraft, consumeDuplicatedImage } from '../../services/draftStorage';
 import type { MealRecord, MealType, FoodItem } from '../../types';
 
 interface FoodRecordFlowProps {
@@ -14,10 +15,28 @@ interface FoodRecordFlowProps {
 type Step = 'capture' | 'tag' | 'preview';
 
 export const FoodRecordFlow: React.FC<FoodRecordFlowProps> = ({ onRecordSaved }) => {
+  const initDone = useRef(false);
   const [step, setStep] = useState<Step>('capture');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>('');
+  /** When duplicating from history, we store the dataUrl directly (no File) */
+  const [duplicatedImageUrl, setDuplicatedImageUrl] = useState<string>('');
   const [record, setRecord] = useState<MealRecord | null>(null);
+
+  // On mount: check if there's a duplicated draft with image
+  useEffect(() => {
+    if (initDone.current) return;
+    initDone.current = true;
+    const draft = loadMealDraft();
+    if (draft?.duplicated) {
+      const img = consumeDuplicatedImage();
+      if (img) {
+        setDuplicatedImageUrl(img);
+        setImagePreviewUrl(img);
+        setStep('tag');
+      }
+    }
+  }, []);
 
   const stepNumber = step === 'capture' ? 1 : step === 'tag' ? 2 : 3;
 
@@ -25,22 +44,38 @@ export const FoodRecordFlow: React.FC<FoodRecordFlowProps> = ({ onRecordSaved })
     setStep('capture');
     setImageFile(null);
     setImagePreviewUrl('');
+    setDuplicatedImageUrl('');
     setRecord(null);
   }, []);
 
   const handlePhotoSelected = useCallback((file: File, previewUrl: string) => {
     setImageFile(file);
     setImagePreviewUrl(previewUrl);
+    setDuplicatedImageUrl(''); // clear duplicated if user picks new photo
     setStep('tag');
   }, []);
 
-  const handleTagComplete = useCallback(async (data: { mealType: MealType; items: FoodItem[]; note: string }) => {
-    if (!imageFile) return;
+  /** Replace duplicated image with a new photo */
+  const handleReplacePhoto = useCallback((file: File, previewUrl: string) => {
+    setImageFile(file);
+    setImagePreviewUrl(previewUrl);
+    setDuplicatedImageUrl('');
+  }, []);
 
-    // Convert image to data URL
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const imageDataUrl = reader.result as string;
+  const handleTagComplete = useCallback(async (data: { mealType: MealType; items: FoodItem[]; note: string }) => {
+    // If we have a duplicated image (no File), use the dataUrl directly
+    const resolveImageUrl = (): Promise<string> => {
+      if (duplicatedImageUrl) return Promise.resolve(duplicatedImageUrl);
+      if (!imageFile) return Promise.reject(new Error('No image'));
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(imageFile);
+      });
+    };
+
+    try {
+      const imageDataUrl = await resolveImageUrl();
       const now = new Date();
       const newRecord: MealRecord = {
         id: now.toISOString(),
@@ -57,9 +92,8 @@ export const FoodRecordFlow: React.FC<FoodRecordFlowProps> = ({ onRecordSaved })
       setRecord(newRecord);
       setStep('preview');
       onRecordSaved();
-    };
-    reader.readAsDataURL(imageFile);
-  }, [imageFile, onRecordSaved]);
+    } catch { /* no image available */ }
+  }, [imageFile, duplicatedImageUrl, onRecordSaved]);
 
   return (
     <div className="max-w-lg mx-auto px-4">
@@ -74,7 +108,9 @@ export const FoodRecordFlow: React.FC<FoodRecordFlowProps> = ({ onRecordSaved })
           imagePreviewUrl={imagePreviewUrl}
           initialMealType={autoDetectMealType()}
           onComplete={handleTagComplete}
-          onBack={() => setStep('capture')}
+          onBack={() => { setDuplicatedImageUrl(''); setStep('capture'); }}
+          isDuplicated={!!duplicatedImageUrl}
+          onReplacePhoto={handleReplacePhoto}
         />
       )}
 

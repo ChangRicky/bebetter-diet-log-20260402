@@ -8,6 +8,10 @@ interface MealTaggerProps {
   initialMealType: MealType;
   onComplete: (data: { mealType: MealType; items: FoodItem[]; note: string }) => void;
   onBack: () => void;
+  /** True if this is a duplicated record from history */
+  isDuplicated?: boolean;
+  /** Called when user wants to replace the duplicated photo */
+  onReplacePhoto?: (file: File, previewUrl: string) => void;
 }
 
 const emptyItem = (): FoodItem => ({ name: '', tags: [] });
@@ -17,6 +21,8 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
   initialMealType,
   onComplete,
   onBack,
+  isDuplicated,
+  onReplacePhoto,
 }) => {
   const savedDraft = useRef(loadMealDraft());
   const [mealType, setMealType] = useState<MealType>((savedDraft.current?.mealType as MealType) ?? initialMealType);
@@ -88,7 +94,7 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
 
   return (
     <div className="flex flex-col gap-4 pb-6">
-      {/* Photo preview + back */}
+      {/* Photo preview + back + replace */}
       <div className="relative">
         <img
           src={imagePreviewUrl}
@@ -102,7 +108,35 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
         >
           ←
         </button>
+        {isDuplicated && onReplacePhoto && (
+          <label className="absolute bottom-3 right-3 bg-black/50 text-white text-xs px-3 py-2 rounded-full backdrop-blur-sm cursor-pointer active:bg-black/70">
+            📷 更換照片
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const url = URL.createObjectURL(file);
+                  onReplacePhoto(file, url);
+                }
+              }}
+            />
+          </label>
+        )}
+        {isDuplicated && (
+          <div className="absolute top-3 right-3 bg-[#efa93b] text-white text-xs font-semibold px-3 py-1.5 rounded-full">
+            從歷史複製
+          </div>
+        )}
       </div>
+
+      {/* Auto-save indicator */}
+      {items.some(i => i.name.trim()) && (
+        <p className="text-xs text-green-500 text-center">💾 已自動暫存</p>
+      )}
 
       {/* Meal type */}
       <div>

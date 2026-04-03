@@ -111,11 +111,22 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
     );
   }
 
+  // Warn before closing if there's unsaved data
+  useEffect(() => {
+    if (!hasAnyValue) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasAnyValue]);
+
   return (
     <div className="max-w-lg mx-auto px-4 pb-6">
       <div className="text-center mb-6">
         <h2 className="text-2xl font-bold text-gray-800">行為指標紀錄表</h2>
         <p className="text-gray-500 text-sm mt-1">每天記錄，每天進步一點點</p>
+        {hasAnyValue && (
+          <p className="text-xs text-green-500 mt-1">💾 已自動暫存，關掉再回來不會消失</p>
+        )}
       </div>
 
       <div className="flex flex-col gap-4">
