@@ -468,7 +468,6 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
     });
     try {
       await navigator.clipboard.writeText(text);
-      alert('已複製！可以直接貼給營養師');
     } catch {
       // Fallback: show text for manual copy
       const ta = document.createElement('textarea');
@@ -477,8 +476,8 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
       ta.select();
       document.execCommand('copy');
       document.body.removeChild(ta);
-      alert('已複製！可以直接貼給營養師');
     }
+    alert(`✅ 數據已複製！\n\n請接著按「匯出 W${week.weekNum} 週報」，\n將週報圖片和數據一起分享給營養師 📤`);
   };
 
   const handleExportPeriod = async (period: CoursePeriod) => {
@@ -835,21 +834,21 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
                     {/* Week summary stats */}
                     <WeekStats records={week.records} />
 
-                    {/* Export week report button — not for practice weeks */}
+                    {/* Action buttons — not for practice weeks */}
                     {!week.isPractice && (
                       <div className="flex gap-2 mt-1">
                         <button
-                          onClick={() => handleExportWeek(week)}
-                          disabled={exportingWeek === wk}
-                          className="flex-1 py-2.5 text-sm font-semibold text-[#d0502a] bg-[#FFF3E8] rounded-lg active:bg-[#FFE8D6] disabled:opacity-50"
-                        >
-                          {exportingWeek === wk ? '匯出中...' : `📤 匯出 W${week.weekNum} 週報`}
-                        </button>
-                        <button
                           onClick={() => handleCopyData(week)}
-                          className="py-2.5 px-3 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg active:bg-gray-200"
+                          className="py-2.5 px-3 text-sm font-semibold text-[#d0502a] bg-[#FFF3E8] rounded-lg active:bg-[#FFE8D6]"
                         >
                           📋 複製數據
+                        </button>
+                        <button
+                          onClick={() => handleExportWeek(week)}
+                          disabled={exportingWeek === wk}
+                          className="flex-1 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg active:bg-gray-200 disabled:opacity-50"
+                        >
+                          {exportingWeek === wk ? '匯出中...' : `📤 匯出 W${week.weekNum} 週報`}
                         </button>
                       </div>
                     )}

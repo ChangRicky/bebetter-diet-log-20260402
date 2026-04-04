@@ -1,6 +1,6 @@
 export type MealType = '早餐' | '午餐' | '晚餐' | '點心';
 
-export type FoodTag = '水果' | '乳製品' | '全穀雜糧' | '低脂肉' | '中脂肉' | '高脂肉' | '蔬菜' | '油脂';
+export type FoodTag = '水果' | '乳製品' | '全穀雜糧' | '低脂肉' | '中脂肉' | '高脂肉' | '蔬菜' | '油脂' | '高蛋白粉';
 
 /** One category entry within a food item — e.g. 全穀雜糧 1.5份 */
 export interface FoodTagEntry {

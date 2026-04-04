@@ -2,7 +2,7 @@ import type { FoodTag, FoodTagEntry, MealType, SleepLevel, SleepQuality, BowelCo
 
 /** 六大類標準排序 — UI 選擇按鈕也按此順序 */
 export const FOOD_TAGS: FoodTag[] = [
-  '全穀雜糧', '水果', '乳製品', '低脂肉', '中脂肉', '高脂肉', '蔬菜', '油脂',
+  '全穀雜糧', '水果', '乳製品', '低脂肉', '中脂肉', '高脂肉', '蔬菜', '油脂', '高蛋白粉',
 ];
 
 /** 六大類排序優先級 (索引越小越前面) */

@@ -1022,7 +1022,8 @@ interface StructuredExportInput {
  * Format: each day = one line, comma-separated.
  * Designed to survive LINE messaging (no tabs, no special chars).
  *
- * Excel columns: 日期,步數,運動次(分),排便,喝水,睡眠,蛋白質份,蔬菜份,飲食紀錄,垃圾食物
+ * Excel columns: 日期,步數,運動次(分),排便,喝水,睡眠,蛋白份,高蛋白,蔬菜份,飲食紀錄,垃圾食物
+ * Note: 蛋白份 = meat tags only (低脂肉+中脂肉+高脂肉), 高蛋白 = protein powder cups (separate to avoid double-counting)
  */
 export function generateStructuredData(input: StructuredExportInput): string {
   const { weekNum, startDate, behaviorRecords, mealRecords, userName } = input;
@@ -1051,7 +1052,7 @@ export function generateStructuredData(input: StructuredExportInput): string {
   lines.push(`【W${weekNum}${userName ? ' ' + userName : ''} ${fmtD(startDate)}~${fmtD(endDate)}】`);
 
   // Column header
-  lines.push('日期,步數,運動(分),排便,喝水,睡眠,蛋白份,蔬菜份,飲食,垃圾');
+  lines.push('日期,步數,運動(分),排便,喝水,睡眠,蛋白份,高蛋白,蔬菜份,飲食,垃圾');
 
   // One line per day
   for (let i = 0; i < 7; i++) {
@@ -1086,24 +1087,36 @@ export function generateStructuredData(input: StructuredExportInput): string {
       sleep = String(SLEEP_QUALITY_SCORE[b.sleepQuality] ?? '');
     }
 
-    // Protein: meat tag servings + protein powder
+    // Protein (meat only, excludes 高蛋白粉 tag) — separate from powder to avoid double-counting
     let meatServings = 0;
+    let dietPowderServings = 0;
     for (const m of meals) {
       for (const item of m.items) {
         for (const t of item.tags) {
           if (t.tag === '低脂肉' || t.tag === '中脂肉' || t.tag === '高脂肉') {
             meatServings += t.qty;
           }
+          if (t.tag === '高蛋白粉') {
+            dietPowderServings += t.qty;
+          }
         }
       }
     }
-    let powderServings = 0;
-    if (b?.proteinCups && b.proteinCups > 0) {
+    const protein = (meatServings > 0 || meals.length > 0) ? String(Math.round(meatServings * 10) / 10) : '';
+
+    // Protein powder — take MAX of behavior-recorded vs diet-tagged to avoid double-counting
+    let behaviorPowderServings = 0;
+    if (b?.proteinCups != null && b.proteinCups > 0) {
       const gpc = b.proteinGrams ? Number(b.proteinGrams) : DEFAULT_PROTEIN_GRAMS_PER_CUP;
-      powderServings = Math.round((b.proteinCups * gpc / PROTEIN_GRAMS_PER_SERVING) * 10) / 10;
+      behaviorPowderServings = Math.round((b.proteinCups * gpc / PROTEIN_GRAMS_PER_SERVING) * 10) / 10;
     }
-    const proteinTotal = meatServings + powderServings;
-    const protein = (proteinTotal > 0 || meals.length > 0 || b) ? String(Math.round(proteinTotal * 10) / 10) : '';
+    const finalPowder = Math.max(behaviorPowderServings, dietPowderServings);
+    let powderStr = '';
+    if (finalPowder > 0) {
+      powderStr = String(Math.round(finalPowder * 10) / 10);
+    } else if (b?.proteinCups === 0) {
+      powderStr = '0';
+    }
 
     // Vegetable servings
     let vegTotal = 0;
@@ -1124,7 +1137,7 @@ export function generateStructuredData(input: StructuredExportInput): string {
     if (b?.junkFood === true) junk = 'Y';
     else if (b?.junkFood === false) junk = 'N';
 
-    lines.push(`${dateStr},${steps},${exercise},${bowel},${water},${sleep},${protein},${veg},${diet},${junk}`);
+    lines.push(`${dateStr},${steps},${exercise},${bowel},${water},${sleep},${protein},${powderStr},${veg},${diet},${junk}`);
   }
 
   return lines.join('\n');
