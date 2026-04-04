@@ -240,6 +240,7 @@ const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 
 interface WeekData {
   weekNum: number;        // 0 = unassigned, 1+ = official within a period
+  globalWeekNum: number;  // continuous across all periods (1, 2, ... 18) for Excel sync
   startDate: Date;
   endDate: Date;
   records: AppRecord[];
@@ -357,13 +358,23 @@ function buildWeeks(records: AppRecord[], periods: CoursePeriod[]): WeekData[] {
       : 0;
 
     weeks.push({
-      weekNum, startDate: s, endDate: e, records: wr, isPractice,
+      weekNum, globalWeekNum: 0, startDate: s, endDate: e, records: wr, isPractice,
       mealCount: wr.filter(r => r.type === 'meal').length,
       behaviorCount: wr.filter(r => r.type === 'behavior').length,
       periodId: period?.id,
       periodLabel: period?.label,
     });
   }
+
+  // Compute globalWeekNum: continuous counter across all periods (skip practice weeks)
+  let globalCounter = 0;
+  for (const w of weeks) {
+    if (!w.isPractice && w.weekNum > 0) {
+      globalCounter++;
+      w.globalWeekNum = globalCounter;
+    }
+  }
+
   return weeks;
 }
 
@@ -442,8 +453,9 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
         mealCounts[dayIdx]++;
       }
       const meals = week.records.filter(r => r.type === 'meal') as MealRecord[];
+      const exportWeekNum = week.globalWeekNum > 0 ? week.globalWeekNum : week.weekNum;
       const url = await composeWeeklyReport({
-        weekNum: week.weekNum,
+        weekNum: exportWeekNum,
         startDate: week.startDate,
         endDate: week.endDate,
         behaviorRecords: behaviors,
@@ -451,7 +463,7 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
         mealCounts,
         userName,
       });
-      downloadImage(url, `BeBetter-W${week.weekNum}週報.jpg`);
+      downloadImage(url, `BeBetter-W${exportWeekNum}週報.jpg`);
     } catch { /* ignore */ }
     setExportingWeek(null);
   };
@@ -459,8 +471,10 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
   const handleCopyData = async (week: WeekData) => {
     const behaviors = week.records.filter(r => r.type === 'behavior') as BehaviorRecord[];
     const meals = week.records.filter(r => r.type === 'meal') as MealRecord[];
+    // Use globalWeekNum so it matches the Excel template (W1-W20 continuously)
+    const exportWeekNum = week.globalWeekNum > 0 ? week.globalWeekNum : week.weekNum;
     const text = generateStructuredData({
-      weekNum: week.weekNum,
+      weekNum: exportWeekNum,
       startDate: week.startDate,
       behaviorRecords: behaviors,
       mealRecords: meals,
@@ -477,7 +491,7 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
       document.execCommand('copy');
       document.body.removeChild(ta);
     }
-    alert(`✅ 數據已複製！\n\n請接著按「匯出 W${week.weekNum} 週報」，\n將週報圖片和數據一起分享給營養師 📤`);
+    alert(`✅ 數據已複製！\n\n請接著按「匯出 W${exportWeekNum} 週報」，\n將週報圖片和數據一起分享給營養師 📤`);
   };
 
   const handleExportPeriod = async (period: CoursePeriod) => {
@@ -848,7 +862,7 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
                           disabled={exportingWeek === wk}
                           className="flex-1 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg active:bg-gray-200 disabled:opacity-50"
                         >
-                          {exportingWeek === wk ? '匯出中...' : `📤 匯出 W${week.weekNum} 週報`}
+                          {exportingWeek === wk ? '匯出中...' : `📤 匯出 W${week.globalWeekNum || week.weekNum} 週報`}
                         </button>
                       </div>
                     )}
