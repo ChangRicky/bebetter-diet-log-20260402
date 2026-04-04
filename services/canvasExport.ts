@@ -1018,12 +1018,14 @@ interface StructuredExportInput {
 }
 
 /**
- * Generate structured text data that nutritionists can paste into Excel.
- * Each row = one day (Mon~Sun), columns match the Excel template.
+ * Generate structured CSV data for nutritionist Excel.
+ * Format: each day = one line, comma-separated.
+ * Designed to survive LINE messaging (no tabs, no special chars).
+ *
+ * Excel columns: 日期,步數,運動次(分),排便,喝水,睡眠,蛋白質份,蔬菜份,飲食紀錄,垃圾食物
  */
 export function generateStructuredData(input: StructuredExportInput): string {
   const { weekNum, startDate, behaviorRecords, mealRecords, userName } = input;
-  const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 
   // Map records to days (0=Mon, 6=Sun)
   const dayBehaviors: (BehaviorRecord | null)[] = Array(7).fill(null);
@@ -1041,56 +1043,50 @@ export function generateStructuredData(input: StructuredExportInput): string {
     dayMeals[dayIdx].push(m);
   }
 
-  // Build header
   const endDate = new Date(startDate.getTime() + 6 * 86400000);
   const fmtD = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
   const lines: string[] = [];
-  lines.push(`【W${weekNum} | ${userName || ''} | ${fmtD(startDate)}~${fmtD(endDate)}】`);
-  lines.push('');
 
-  // Column headers
-  const header = ['', ...WEEKDAY_LABELS.map((d, i) => {
+  // Header line
+  lines.push(`【W${weekNum}${userName ? ' ' + userName : ''} ${fmtD(startDate)}~${fmtD(endDate)}】`);
+
+  // Column header
+  lines.push('日期,步數,運動(分),排便,喝水,睡眠,蛋白份,蔬菜份,飲食,垃圾');
+
+  // One line per day
+  for (let i = 0; i < 7; i++) {
     const date = new Date(startDate.getTime() + i * 86400000);
-    return `${d}(${date.getMonth() + 1}/${date.getDate()})`;
-  })];
-  lines.push(header.join('\t'));
+    const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
+    const b = dayBehaviors[i];
+    const meals = dayMeals[i];
 
-  // Steps
-  const stepsRow = ['步數', ...dayBehaviors.map(b => b?.stepsCount ? b.stepsCount : '-')];
-  lines.push(stepsRow.join('\t'));
+    // Steps
+    const steps = b?.stepsCount || '';
 
-  // Exercise: format as "次數(分鐘)"
-  const exerciseRow = ['運動', ...dayBehaviors.map(b => {
+    // Exercise: "次數(分鐘)" — total duration for the day
+    let exercise = '';
     if (b?.exercise === true) {
-      const dur = b.exerciseDuration || '0';
-      return `1(${dur})`;
+      exercise = `1(${b.exerciseDuration || '0'})`;
+    } else if (b?.exercise === false) {
+      exercise = '0(0)';
     }
-    if (b?.exercise === false) return '0(0)';
-    return '-';
-  })];
-  lines.push(exerciseRow.join('\t'));
 
-  // Bowel
-  const bowelRow = ['排便', ...dayBehaviors.map(b => {
-    if (b?.bowel == null) return '-';
-    return String(BOWEL_TO_NUMBER[b.bowel] ?? 0);
-  })];
-  lines.push(bowelRow.join('\t'));
+    // Bowel
+    let bowel = '';
+    if (b?.bowel != null) {
+      bowel = String(BOWEL_TO_NUMBER[b.bowel] ?? 0);
+    }
 
-  // Water
-  const waterRow = ['喝水', ...dayBehaviors.map(b => b?.waterMl != null ? String(b.waterMl) : '-')];
-  lines.push(waterRow.join('\t'));
+    // Water
+    const water = b?.waterMl != null ? String(b.waterMl) : '';
 
-  // Sleep quality (1-5 score)
-  const sleepRow = ['睡眠', ...dayBehaviors.map(b => {
-    if (!b?.sleepQuality) return '-';
-    return String(SLEEP_QUALITY_SCORE[b.sleepQuality] ?? '-');
-  })];
-  lines.push(sleepRow.join('\t'));
+    // Sleep quality (1-5)
+    let sleep = '';
+    if (b?.sleepQuality) {
+      sleep = String(SLEEP_QUALITY_SCORE[b.sleepQuality] ?? '');
+    }
 
-  // Protein: meat servings from meal records + protein powder
-  const proteinRow = ['蛋白份', ...dayMeals.map((meals, i) => {
-    // Meat servings from diet records
+    // Protein: meat tag servings + protein powder
     let meatServings = 0;
     for (const m of meals) {
       for (const item of m.items) {
@@ -1101,54 +1097,35 @@ export function generateStructuredData(input: StructuredExportInput): string {
         }
       }
     }
-    // Protein powder servings
-    const b = dayBehaviors[i];
     let powderServings = 0;
     if (b?.proteinCups && b.proteinCups > 0) {
-      const gramsPerCup = b.proteinGrams ? Number(b.proteinGrams) : DEFAULT_PROTEIN_GRAMS_PER_CUP;
-      powderServings = Math.round((b.proteinCups * gramsPerCup / PROTEIN_GRAMS_PER_SERVING) * 10) / 10;
+      const gpc = b.proteinGrams ? Number(b.proteinGrams) : DEFAULT_PROTEIN_GRAMS_PER_CUP;
+      powderServings = Math.round((b.proteinCups * gpc / PROTEIN_GRAMS_PER_SERVING) * 10) / 10;
     }
-    const total = meatServings + powderServings;
-    if (total === 0 && meals.length === 0 && !b) return '-';
-    return String(Math.round(total * 10) / 10);
-  })];
-  lines.push(proteinRow.join('\t'));
+    const proteinTotal = meatServings + powderServings;
+    const protein = (proteinTotal > 0 || meals.length > 0 || b) ? String(Math.round(proteinTotal * 10) / 10) : '';
 
-  // Protein powder detail
-  const powderRow = ['高蛋白', ...dayBehaviors.map(b => {
-    if (b?.proteinCups == null) return '-';
-    if (b.proteinCups === 0) return '0';
-    const g = b.proteinGrams || String(DEFAULT_PROTEIN_GRAMS_PER_CUP);
-    return `${b.proteinCups}杯${g}g`;
-  })];
-  lines.push(powderRow.join('\t'));
-
-  // Vegetable servings from meal records
-  const vegRow = ['蔬菜份', ...dayMeals.map(meals => {
-    let total = 0;
+    // Vegetable servings
+    let vegTotal = 0;
     for (const m of meals) {
       for (const item of m.items) {
         for (const t of item.tags) {
-          if (t.tag === '蔬菜') total += t.qty;
+          if (t.tag === '蔬菜') vegTotal += t.qty;
         }
       }
     }
-    if (total === 0 && meals.length === 0) return '-';
-    return String(Math.round(total * 10) / 10);
-  })];
-  lines.push(vegRow.join('\t'));
+    const veg = (vegTotal > 0 || meals.length > 0) ? String(Math.round(vegTotal * 10) / 10) : '';
 
-  // Diet record (Y/N)
-  const dietRow = ['飲食', ...dayMeals.map(meals => meals.length > 0 ? 'Y' : 'N')];
-  lines.push(dietRow.join('\t'));
+    // Diet record
+    const diet = meals.length > 0 ? 'Y' : 'N';
 
-  // Junk food
-  const junkRow = ['垃圾', ...dayBehaviors.map(b => {
-    if (b?.junkFood === true) return 'Y';
-    if (b?.junkFood === false) return 'N';
-    return '-';
-  })];
-  lines.push(junkRow.join('\t'));
+    // Junk food
+    let junk = '';
+    if (b?.junkFood === true) junk = 'Y';
+    else if (b?.junkFood === false) junk = 'N';
+
+    lines.push(`${dateStr},${steps},${exercise},${bowel},${water},${sleep},${protein},${veg},${diet},${junk}`);
+  }
 
   return lines.join('\n');
 }
