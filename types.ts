@@ -26,7 +26,7 @@ export interface MealRecord {
 }
 
 export type SleepLevel = '<6hr' | '6-7hr' | '7-8hr' | '8hr+';
-export type SleepQuality = '很好' | '還好' | '不太好' | '很差';
+export type SleepQuality = '很好' | '不錯' | '還好' | '不太好' | '很差';
 export type BowelCount = '沒有' | '1次' | '2次' | '3次以上';
 
 export interface BehaviorRecord {
@@ -47,6 +47,7 @@ export interface BehaviorRecord {
   bedtime: string;              // e.g. "23:30"
   bowel: BowelCount | null;
   bowelNote: string;            // 排便備註
+  junkFood: boolean | null;     // 垃圾食物（有吃=true, 沒吃=false）
   supplements: string;          // 保健品/藥物紀錄
   generalNote: string;
   /** Card color theme */

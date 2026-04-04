@@ -1,5 +1,5 @@
 import type { MealRecord, BehaviorRecord, FoodItem, FoodTag } from '../types';
-import { CARD_THEMES, sortTags, FOOD_TAGS } from '../constants';
+import { CARD_THEMES, sortTags, FOOD_TAGS, SLEEP_QUALITY_SCORE, BOWEL_TO_NUMBER, DEFAULT_PROTEIN_GRAMS_PER_CUP, PROTEIN_GRAMS_PER_SERVING } from '../constants';
 
 const CARD_WIDTH = 1080;
 const PAD = 48;
@@ -365,6 +365,7 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
     sleepVal = `${record.bedtime}就寢`;
   }
   const bowelVal = record.bowel ? (record.bowelNote?.trim() ? `${record.bowel}（${record.bowelNote}）` : record.bowel) : null;
+  const junkFoodVal = record.junkFood === true ? '有吃' : record.junkFood === false ? '沒有' : null;
   const supplementsVal = record.supplements?.trim() || null;
 
   const indicatorRows = [
@@ -374,6 +375,7 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
     { icon: '🚶', label: '走路', value: stepsVal },
     { icon: '😴', label: '睡眠', value: sleepVal },
     { icon: '🚽', label: '排便', value: bowelVal },
+    { icon: '🚫', label: '垃圾食物', value: junkFoodVal },
     { icon: '💊', label: '保健品', value: supplementsVal },
   ];
 
@@ -456,7 +458,7 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
 }
 
 function rows_count(record: BehaviorRecord): number {
-  return 7; // 7 indicator rows (water, protein, exercise, steps, sleep, bowel, supplements)
+  return 8; // 8 indicator rows (water, protein, exercise, steps, sleep, bowel, junkFood, supplements)
 }
 
 function formatRecordDate(dateStr: string): string {
@@ -477,7 +479,7 @@ function indicatorColorDark(value: string): string {
 // ─── Weekly Report Card (table format for nutritionists) ─────────────────────
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];
-const INDICATOR_LABELS = ['💧 喝水(ml)', '🥛 高蛋白', '🏃 運動', '🚶 步數', '😴 睡眠', '🚽 排便', '💊 保健品'];
+const INDICATOR_LABELS = ['💧 喝水(ml)', '🥛 高蛋白', '🏃 運動', '🚶 步數', '😴 睡眠', '🚽 排便', '🚫 垃圾食物', '💊 保健品'];
 
 interface WeeklyReportInput {
   weekNum: number;
@@ -618,6 +620,7 @@ export async function composeWeeklyReport(input: WeeklyReportInput): Promise<str
       return s;
     },
     (b: BehaviorRecord | null) => b?.bowel ? (b.bowelNote?.trim() ? `${b.bowel}\n${b.bowelNote}` : b.bowel) : '—',
+    (b: BehaviorRecord | null) => b?.junkFood === true ? '有吃' : b?.junkFood === false ? '沒有' : '—',
     (b: BehaviorRecord | null) => b?.supplements?.trim() || '—',
   ];
 
@@ -1002,4 +1005,150 @@ export async function composeProgramSummary(input: ProgramSummaryInput): Promise
   if (!outCtx) throw new Error('Canvas 2D context not available');
   outCtx.drawImage(canvas, 0, 0, CARD_W, y, 0, 0, CARD_W, y);
   return out.toDataURL('image/jpeg', 0.92);
+}
+
+// ─── Structured Data Export (for nutritionist Excel) ────────────────────────
+
+interface StructuredExportInput {
+  weekNum: number;
+  startDate: Date;       // Monday of the week
+  behaviorRecords: BehaviorRecord[];
+  mealRecords: MealRecord[];
+  userName?: string | null;
+}
+
+/**
+ * Generate structured text data that nutritionists can paste into Excel.
+ * Each row = one day (Mon~Sun), columns match the Excel template.
+ */
+export function generateStructuredData(input: StructuredExportInput): string {
+  const { weekNum, startDate, behaviorRecords, mealRecords, userName } = input;
+  const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
+
+  // Map records to days (0=Mon, 6=Sun)
+  const dayBehaviors: (BehaviorRecord | null)[] = Array(7).fill(null);
+  for (const b of behaviorRecords) {
+    const d = b.recordDate ? new Date(b.recordDate + 'T00:00:00') : new Date(b.timestamp);
+    const dayIdx = (d.getDay() + 6) % 7;
+    dayBehaviors[dayIdx] = b;
+  }
+
+  // Meal records per day
+  const dayMeals: MealRecord[][] = Array.from({ length: 7 }, () => []);
+  for (const m of mealRecords) {
+    const d = new Date(m.timestamp);
+    const dayIdx = (d.getDay() + 6) % 7;
+    dayMeals[dayIdx].push(m);
+  }
+
+  // Build header
+  const endDate = new Date(startDate.getTime() + 6 * 86400000);
+  const fmtD = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
+  const lines: string[] = [];
+  lines.push(`【W${weekNum} | ${userName || ''} | ${fmtD(startDate)}~${fmtD(endDate)}】`);
+  lines.push('');
+
+  // Column headers
+  const header = ['', ...WEEKDAY_LABELS.map((d, i) => {
+    const date = new Date(startDate.getTime() + i * 86400000);
+    return `${d}(${date.getMonth() + 1}/${date.getDate()})`;
+  })];
+  lines.push(header.join('\t'));
+
+  // Steps
+  const stepsRow = ['步數', ...dayBehaviors.map(b => b?.stepsCount ? b.stepsCount : '-')];
+  lines.push(stepsRow.join('\t'));
+
+  // Exercise: format as "次數(分鐘)"
+  const exerciseRow = ['運動', ...dayBehaviors.map(b => {
+    if (b?.exercise === true) {
+      const dur = b.exerciseDuration || '0';
+      return `1(${dur})`;
+    }
+    if (b?.exercise === false) return '0(0)';
+    return '-';
+  })];
+  lines.push(exerciseRow.join('\t'));
+
+  // Bowel
+  const bowelRow = ['排便', ...dayBehaviors.map(b => {
+    if (b?.bowel == null) return '-';
+    return String(BOWEL_TO_NUMBER[b.bowel] ?? 0);
+  })];
+  lines.push(bowelRow.join('\t'));
+
+  // Water
+  const waterRow = ['喝水', ...dayBehaviors.map(b => b?.waterMl != null ? String(b.waterMl) : '-')];
+  lines.push(waterRow.join('\t'));
+
+  // Sleep quality (1-5 score)
+  const sleepRow = ['睡眠', ...dayBehaviors.map(b => {
+    if (!b?.sleepQuality) return '-';
+    return String(SLEEP_QUALITY_SCORE[b.sleepQuality] ?? '-');
+  })];
+  lines.push(sleepRow.join('\t'));
+
+  // Protein: meat servings from meal records + protein powder
+  const proteinRow = ['蛋白份', ...dayMeals.map((meals, i) => {
+    // Meat servings from diet records
+    let meatServings = 0;
+    for (const m of meals) {
+      for (const item of m.items) {
+        for (const t of item.tags) {
+          if (t.tag === '低脂肉' || t.tag === '中脂肉' || t.tag === '高脂肉') {
+            meatServings += t.qty;
+          }
+        }
+      }
+    }
+    // Protein powder servings
+    const b = dayBehaviors[i];
+    let powderServings = 0;
+    if (b?.proteinCups && b.proteinCups > 0) {
+      const gramsPerCup = b.proteinGrams ? Number(b.proteinGrams) : DEFAULT_PROTEIN_GRAMS_PER_CUP;
+      powderServings = Math.round((b.proteinCups * gramsPerCup / PROTEIN_GRAMS_PER_SERVING) * 10) / 10;
+    }
+    const total = meatServings + powderServings;
+    if (total === 0 && meals.length === 0 && !b) return '-';
+    return String(Math.round(total * 10) / 10);
+  })];
+  lines.push(proteinRow.join('\t'));
+
+  // Protein powder detail
+  const powderRow = ['高蛋白', ...dayBehaviors.map(b => {
+    if (b?.proteinCups == null) return '-';
+    if (b.proteinCups === 0) return '0';
+    const g = b.proteinGrams || String(DEFAULT_PROTEIN_GRAMS_PER_CUP);
+    return `${b.proteinCups}杯${g}g`;
+  })];
+  lines.push(powderRow.join('\t'));
+
+  // Vegetable servings from meal records
+  const vegRow = ['蔬菜份', ...dayMeals.map(meals => {
+    let total = 0;
+    for (const m of meals) {
+      for (const item of m.items) {
+        for (const t of item.tags) {
+          if (t.tag === '蔬菜') total += t.qty;
+        }
+      }
+    }
+    if (total === 0 && meals.length === 0) return '-';
+    return String(Math.round(total * 10) / 10);
+  })];
+  lines.push(vegRow.join('\t'));
+
+  // Diet record (Y/N)
+  const dietRow = ['飲食', ...dayMeals.map(meals => meals.length > 0 ? 'Y' : 'N')];
+  lines.push(dietRow.join('\t'));
+
+  // Junk food
+  const junkRow = ['垃圾', ...dayBehaviors.map(b => {
+    if (b?.junkFood === true) return 'Y';
+    if (b?.junkFood === false) return 'N';
+    return '-';
+  })];
+  lines.push(junkRow.join('\t'));
+
+  return lines.join('\n');
 }

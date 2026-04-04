@@ -20,7 +20,23 @@ export function sortTags(tags: { tag: string }[]) {
 export const MEAL_TYPES: MealType[] = ['早餐', '午餐', '晚餐', '點心'];
 
 export const SLEEP_LEVELS: SleepLevel[] = ['<6hr', '6-7hr', '7-8hr', '8hr+'];
-export const SLEEP_QUALITIES: SleepQuality[] = ['很好', '還好', '不太好', '很差'];
+export const SLEEP_QUALITIES: SleepQuality[] = ['很好', '不錯', '還好', '不太好', '很差'];
+
+/** 睡眠品質 → Excel 1-5 分數映射 */
+export const SLEEP_QUALITY_SCORE: Record<string, number> = {
+  '很好': 5, '不錯': 4, '還好': 3, '不太好': 2, '很差': 1,
+};
+
+/** 排便選項 → 數字映射 */
+export const BOWEL_TO_NUMBER: Record<string, number> = {
+  '沒有': 0, '1次': 1, '2次': 2, '3次以上': 3,
+};
+
+/** 高蛋白粉默認每杯克數 */
+export const DEFAULT_PROTEIN_GRAMS_PER_CUP = 20;
+
+/** 每份蛋白質 = 7 克 */
+export const PROTEIN_GRAMS_PER_SERVING = 7;
 export const BOWEL_OPTIONS: BowelCount[] = ['沒有', '1次', '2次', '3次以上'];
 export const PROTEIN_CUPS = [0, 1, 2];
 

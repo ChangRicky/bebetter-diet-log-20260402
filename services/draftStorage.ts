@@ -18,6 +18,7 @@ export interface BehaviorDraft {
   bedtime?: string;
   bowel: string | null;
   bowelNote?: string;
+  junkFood?: boolean | null;
   supplements?: string;
   generalNote: string;
   cardTheme: string;

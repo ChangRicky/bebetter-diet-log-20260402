@@ -31,6 +31,7 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
   const [bedtime, setBedtime] = useState(draft.current?.bedtime ?? '');
   const [bowel, setBowel] = useState<BowelCount | null>((draft.current?.bowel as BowelCount) ?? null);
   const [bowelNote, setBowelNote] = useState(draft.current?.bowelNote ?? '');
+  const [junkFood, setJunkFood] = useState<boolean | null>(draft.current?.junkFood ?? null);
   const [supplements, setSupplements] = useState(draft.current?.supplements ?? '');
   const [generalNote, setGeneralNote] = useState(draft.current?.generalNote ?? '');
   const [cardTheme, setCardTheme] = useState<BehaviorRecord['cardTheme']>((draft.current?.cardTheme as BehaviorRecord['cardTheme']) ?? 'dark');
@@ -44,12 +45,12 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
     saveBehaviorDraft({
       recordDate, waterMl, customWater, proteinCups, proteinGrams,
       exercise, exerciseNote, exerciseDuration, stepsCount,
-      sleep, sleepQuality, bedtime, bowel, bowelNote, supplements, generalNote, cardTheme,
+      sleep, sleepQuality, bedtime, bowel, bowelNote, junkFood, supplements, generalNote, cardTheme,
     });
-  }, [recordDate, waterMl, customWater, proteinCups, proteinGrams, exercise, exerciseNote, exerciseDuration, stepsCount, sleep, sleepQuality, bedtime, bowel, bowelNote, supplements, generalNote, cardTheme, cardImageUrl]);
+  }, [recordDate, waterMl, customWater, proteinCups, proteinGrams, exercise, exerciseNote, exerciseDuration, stepsCount, sleep, sleepQuality, bedtime, bowel, bowelNote, junkFood, supplements, generalNote, cardTheme, cardImageUrl]);
 
   const hasAnyValue = waterMl !== null || proteinCups !== null || exercise !== null ||
-    stepsCount !== '' || sleep !== null || bowel !== null;
+    stepsCount !== '' || sleep !== null || bowel !== null || junkFood !== null;
 
   const handleWaterPreset = (ml: number) => {
     setWaterMl(ml);
@@ -73,7 +74,7 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
       waterMl, proteinCups, proteinGrams,
       exercise, exerciseNote, exerciseDuration,
       stepsCount, sleep, sleepQuality, bedtime: bedtime || '',
-      bowel, bowelNote: bowelNote || '', supplements: supplements || '', generalNote, cardTheme,
+      bowel, bowelNote: bowelNote || '', junkFood, supplements: supplements || '', generalNote, cardTheme,
     };
 
     // Step 1: save record
@@ -106,7 +107,7 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
     setProteinCups(null); setShowProteinDetail(false); setProteinGrams('');
     setExercise(null); setExerciseNote(''); setExerciseDuration('');
     setStepsCount(''); setSleep(null); setSleepQuality(null); setBedtime('');
-    setBowel(null); setBowelNote(''); setSupplements(''); setGeneralNote(''); setCardTheme('dark'); setCardImageUrl(null);
+    setBowel(null); setBowelNote(''); setJunkFood(null); setSupplements(''); setGeneralNote(''); setCardTheme('dark'); setCardImageUrl(null);
     clearBehaviorDraft();
   };
 
@@ -285,7 +286,7 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
             options={SLEEP_QUALITIES}
             value={sleepQuality}
             onChange={setSleepQuality}
-            colorMap={{ '很好': 'bg-[#d0502a] text-white', '還好': 'bg-yellow-500 text-white', '不太好': 'bg-orange-500 text-white', '很差': 'bg-red-500 text-white' }}
+            colorMap={{ '很好': 'bg-[#d0502a] text-white', '不錯': 'bg-[#d0502a] text-white', '還好': 'bg-yellow-500 text-white', '不太好': 'bg-orange-500 text-white', '很差': 'bg-red-500 text-white' }}
           />
           <p className="text-xs text-gray-400 mt-3 mb-2">就寢時間</p>
           <input
@@ -315,6 +316,14 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
               style={{ fontSize: '16px' }}
             />
           )}
+        </Card>
+
+        {/* 垃圾食物 */}
+        <Card icon="🚫" label="垃圾食物" subLabel="今天有沒有吃？">
+          <div className="flex gap-2">
+            <ToggleBtn label="沒有吃" active={junkFood === false} onClick={() => setJunkFood(false)} activeClass="bg-[#d0502a] text-white" />
+            <ToggleBtn label="有吃" active={junkFood === true} onClick={() => setJunkFood(true)} activeClass="bg-red-400 text-white" />
+          </div>
         </Card>
 
         {/* 保健品/藥物 */}

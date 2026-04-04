@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { composeMealCard, composeBehaviorCard, composeWeeklyReport, composeProgramSummary } from '../../services/canvasExport';
+import { composeMealCard, composeBehaviorCard, composeWeeklyReport, composeProgramSummary, generateStructuredData } from '../../services/canvasExport';
 import { getLiffUserName } from '../../services/liffService';
 import { saveMealDraft, saveBehaviorDraft, setDuplicatedImage } from '../../services/draftStorage';
 import { sortTags, toDateString } from '../../constants';
@@ -173,6 +173,7 @@ const BehaviorCard: React.FC<{ record: BehaviorRecord; onDuplicate?: () => void 
       bedtime: record.bedtime || '',
       bowel: record.bowel,
       bowelNote: record.bowelNote || '',
+      junkFood: record.junkFood ?? null,
       supplements: record.supplements || '',
       generalNote: '',
       cardTheme: record.cardTheme || 'dark',
@@ -191,6 +192,7 @@ const BehaviorCard: React.FC<{ record: BehaviorRecord; onDuplicate?: () => void 
     { icon: '🚶', label: '步數', value: record.stepsCount ? `${record.stepsCount}步` : null },
     { icon: '😴', label: '睡眠', value: record.sleep ? `${record.sleep}${record.sleepQuality ? `(${record.sleepQuality})` : ''}${record.bedtime ? ` ${record.bedtime}就寢` : ''}` : record.bedtime ? `${record.bedtime}就寢` : null },
     { icon: '🚽', label: '排便', value: bowelDisplay },
+    { icon: '🚫', label: '垃圾食物', value: record.junkFood === true ? '有吃' : record.junkFood === false ? '沒有' : null },
     { icon: '💊', label: '保健品', value: record.supplements?.trim() || null },
   ].filter((i) => i.value != null && i.value !== 'undefined');
 
@@ -452,6 +454,31 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
       downloadImage(url, `BeBetter-W${week.weekNum}週報.jpg`);
     } catch { /* ignore */ }
     setExportingWeek(null);
+  };
+
+  const handleCopyData = async (week: WeekData) => {
+    const behaviors = week.records.filter(r => r.type === 'behavior') as BehaviorRecord[];
+    const meals = week.records.filter(r => r.type === 'meal') as MealRecord[];
+    const text = generateStructuredData({
+      weekNum: week.weekNum,
+      startDate: week.startDate,
+      behaviorRecords: behaviors,
+      mealRecords: meals,
+      userName,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('已複製！可以直接貼給營養師');
+    } catch {
+      // Fallback: show text for manual copy
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      alert('已複製！可以直接貼給營養師');
+    }
   };
 
   const handleExportPeriod = async (period: CoursePeriod) => {
@@ -810,13 +837,21 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
 
                     {/* Export week report button — not for practice weeks */}
                     {!week.isPractice && (
-                      <button
-                        onClick={() => handleExportWeek(week)}
-                        disabled={exportingWeek === wk}
-                        className="w-full mt-1 py-2.5 text-sm font-semibold text-[#d0502a] bg-[#FFF3E8] rounded-lg active:bg-[#FFE8D6] disabled:opacity-50"
-                      >
-                        {exportingWeek === wk ? '匯出中...' : `📤 匯出 W${week.weekNum} 週報`}
-                      </button>
+                      <div className="flex gap-2 mt-1">
+                        <button
+                          onClick={() => handleExportWeek(week)}
+                          disabled={exportingWeek === wk}
+                          className="flex-1 py-2.5 text-sm font-semibold text-[#d0502a] bg-[#FFF3E8] rounded-lg active:bg-[#FFE8D6] disabled:opacity-50"
+                        >
+                          {exportingWeek === wk ? '匯出中...' : `📤 匯出 W${week.weekNum} 週報`}
+                        </button>
+                        <button
+                          onClick={() => handleCopyData(week)}
+                          className="py-2.5 px-3 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg active:bg-gray-200"
+                        >
+                          📋 複製數據
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
@@ -857,6 +892,8 @@ const DayRecordRow: React.FC<{ record: AppRecord }> = ({ record }) => {
   if (beh.stepsCount) parts.push(`🚶${Number(beh.stepsCount).toLocaleString()}步`);
   if (beh.sleep) parts.push(`😴${beh.sleep}${beh.sleepQuality ? `(${beh.sleepQuality})` : ''}`);
   if (beh.bowel) parts.push(`🚽${beh.bowel}${beh.bowelNote?.trim() ? `(${beh.bowelNote})` : ''}`);
+  if (beh.junkFood === true) parts.push('🚫有吃垃圾食物');
+  else if (beh.junkFood === false) parts.push('🚫沒吃垃圾食物');
   if (beh.supplements?.trim()) parts.push(`💊${beh.supplements.trim()}`);
 
   return (
