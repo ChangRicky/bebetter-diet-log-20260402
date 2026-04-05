@@ -72,7 +72,7 @@ function fmtQty(qty: number): string {
 
 /** Draw elegant brand footer bar with optional user name */
 function drawBrandFooter(ctx: CanvasRenderingContext2D, y: number, width: number, light: boolean, userName?: string | null) {
-  const footerH = 56;
+  const footerH = 72;
   // Gradient accent line
   const grad = ctx.createLinearGradient(0, y, width, y);
   grad.addColorStop(0, BRAND_PRIMARY);
@@ -84,23 +84,23 @@ function drawBrandFooter(ctx: CanvasRenderingContext2D, y: number, width: number
   ctx.fillStyle = light ? '#FAFAFA' : 'rgba(255,255,255,0.05)';
   ctx.fillRect(0, y + 3, width, footerH);
 
-  // Brand text (left side)
+  // Brand text (left side) — enlarged & more visible
   ctx.textBaseline = 'middle';
   const centerY = y + 3 + footerH / 2;
 
-  ctx.font = `bold 22px Georgia, "Times New Roman", serif`;
+  ctx.font = `bold 28px Georgia, "Times New Roman", serif`;
   ctx.fillStyle = BRAND_PRIMARY;
   ctx.fillText('BeBetter', PAD, centerY);
   const bw = ctx.measureText('BeBetter').width;
 
-  ctx.font = `20px "Noto Sans TC", sans-serif`;
-  ctx.fillStyle = light ? '#9CA3AF' : 'rgba(255,255,255,0.4)';
+  ctx.font = `24px "Noto Sans TC", sans-serif`;
+  ctx.fillStyle = light ? '#6B7280' : 'rgba(255,255,255,0.5)';
   ctx.fillText(' — 陪你成為更好的自己', PAD + bw, centerY);
 
   // User name (right side)
   if (userName) {
-    ctx.font = `bold 22px "Noto Sans TC", sans-serif`;
-    ctx.fillStyle = light ? '#6B7280' : 'rgba(255,255,255,0.6)';
+    ctx.font = `bold 26px "Noto Sans TC", sans-serif`;
+    ctx.fillStyle = light ? '#4B5563' : 'rgba(255,255,255,0.7)';
     const nameW = ctx.measureText(userName).width;
     ctx.fillText(userName, width - PAD - nameW, centerY);
   }
@@ -437,20 +437,24 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
   ctx.fillRect(PAD, y, CARD_WIDTH - PAD * 2, 2);
   y += 12;
 
-  // Bottom brand text + user name
+  // Bottom brand text + user name (enlarged & more visible)
   ctx.textBaseline = 'top';
-  ctx.font = `20px Georgia, "Times New Roman", serif`;
+  ctx.font = `bold 28px Georgia, "Times New Roman", serif`;
   ctx.fillStyle = BRAND_GOLD;
-  ctx.globalAlpha = 0.6;
-  ctx.fillText('BeBetter — 陪你成為更好的自己', PAD, y);
+  ctx.globalAlpha = 0.85;
+  ctx.fillText('BeBetter', PAD, y);
+  const bbwBehavior = ctx.measureText('BeBetter').width;
+  ctx.font = `26px "Noto Sans TC", sans-serif`;
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.fillText(' — 陪你成為更好的自己', PAD + bbwBehavior, y);
   if (userName) {
-    ctx.font = `bold 22px "Noto Sans TC", sans-serif`;
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = `bold 26px "Noto Sans TC", sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
     const nameW = ctx.measureText(userName).width;
     ctx.fillText(userName, CARD_WIDTH - PAD - nameW, y);
   }
   ctx.globalAlpha = 1;
-  y += 36;
+  y += 44;
 
   // Trim canvas to actual height
   const finalCanvas = document.createElement('canvas');
@@ -531,20 +535,20 @@ export async function composeWeeklyReport(input: WeeklyReportInput): Promise<str
     .map(tag => ({ tag, avg: tagTotals[tag] ? Math.round((tagTotals[tag] / numDays) * 10) / 10 : 0 }))
     .filter(t => t.avg > 0);
 
-  // Calculate height
-  const headerH = 100;
+  // Calculate height — use generous estimate, trim to actual at end
+  const headerH = 120;
   const tableHeaderH = 44;
   const indicatorRows = INDICATOR_LABELS.length;
   const mealRowH = ROW_H;
   const tableH = tableHeaderH + (indicatorRows + 1) * ROW_H; // +1 for meal row
-  const summaryH = 100;
-  const tagAvgH = tagAverages.length > 0 ? 100 : 0; // food tag average section
-  const footerH = 60;
+  const summaryH = 120;
+  const tagAvgH = tagAverages.length > 0 ? 120 : 0;
+  const footerH = 80;
   const totalH = headerH + tableH + summaryH + tagAvgH + footerH + PAD * 2;
 
   const canvas = document.createElement('canvas');
   canvas.width = CARD_W;
-  canvas.height = totalH;
+  canvas.height = totalH + 100; // extra buffer to prevent cutoff
   const ctx = canvas.getContext('2d')!;
 
   // Background
@@ -704,33 +708,34 @@ export async function composeWeeklyReport(input: WeeklyReportInput): Promise<str
     y += 96;
   }
 
-  // Footer
+  // Footer — enlarged & more visible
+  y += 8; // spacing before footer
   const footGrad = ctx.createLinearGradient(0, y, CARD_W, y);
   footGrad.addColorStop(0, BRAND_PRIMARY);
   footGrad.addColorStop(1, BRAND_GOLD);
   ctx.fillStyle = footGrad;
   ctx.fillRect(0, y, CARD_W, 3);
   ctx.fillStyle = '#FAFAFA';
-  ctx.fillRect(0, y + 3, CARD_W, 50);
+  ctx.fillRect(0, y + 3, CARD_W, 64);
 
   ctx.textBaseline = 'middle';
-  ctx.font = `bold 20px Georgia, "Times New Roman", serif`;
+  ctx.font = `bold 26px Georgia, "Times New Roman", serif`;
   ctx.fillStyle = BRAND_PRIMARY;
-  ctx.fillText('BeBetter', PAD, y + 28);
+  ctx.fillText('BeBetter', PAD, y + 35);
   const bbw = ctx.measureText('BeBetter').width;
-  ctx.font = `18px "Noto Sans TC", sans-serif`;
-  ctx.fillStyle = '#9CA3AF';
-  ctx.fillText(' — 陪你成為更好的自己', PAD + bbw, y + 28);
+  ctx.font = `22px "Noto Sans TC", sans-serif`;
+  ctx.fillStyle = '#6B7280';
+  ctx.fillText(' — 陪你成為更好的自己', PAD + bbw, y + 35);
 
   if (userName) {
-    ctx.font = `bold 20px "Noto Sans TC", sans-serif`;
-    ctx.fillStyle = '#6B7280';
+    ctx.font = `bold 24px "Noto Sans TC", sans-serif`;
+    ctx.fillStyle = '#4B5563';
     const nw = ctx.measureText(userName).width;
-    ctx.fillText(userName, CARD_W - PAD - nw, y + 28);
+    ctx.fillText(userName, CARD_W - PAD - nw, y + 35);
   }
-  y += 53;
+  y += 70;
 
-  // Trim
+  // Trim canvas to actual rendered height
   const out = document.createElement('canvas');
   out.width = CARD_W;
   out.height = y;
@@ -993,16 +998,20 @@ export async function composeProgramSummary(input: ProgramSummaryInput): Promise
   ctx.fillText(summaryLine, T_PAD + 16, y + 46);
   y += 96;
 
-  // Footer
+  // Footer — enlarged & more visible
   ctx.fillStyle = ag;
   ctx.fillRect(T_PAD, y, CARD_W - T_PAD * 2, 2);
-  y += 12;
-  ctx.font = `18px Georgia, "Times New Roman", serif`;
+  y += 14;
+  ctx.font = `bold 26px Georgia, "Times New Roman", serif`;
   ctx.fillStyle = BRAND_GOLD;
-  ctx.globalAlpha = 0.6;
-  ctx.fillText('BeBetter — 陪你成為更好的自己', T_PAD, y);
+  ctx.globalAlpha = 0.85;
+  ctx.fillText('BeBetter', T_PAD, y);
+  const progBw = ctx.measureText('BeBetter').width;
+  ctx.font = `24px "Noto Sans TC", sans-serif`;
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fillText(' — 陪你成為更好的自己', T_PAD + progBw, y);
   ctx.globalAlpha = 1;
-  y += 36;
+  y += 44;
 
   const out = document.createElement('canvas');
   out.width = CARD_W;
@@ -1024,11 +1033,11 @@ interface StructuredExportInput {
 }
 
 /**
- * Generate structured CSV data for nutritionist Excel.
- * Format: each day = one line, comma-separated.
- * Designed to survive LINE messaging (no tabs, no special chars).
+ * Generate structured data for nutritionist Excel.
+ * Format: each day = one line, TAB-separated (splits into columns when pasted in Excel/Numbers).
+ * Title line is plain text (not tab-separated).
  *
- * Excel columns: 日期,步數,運動次(分),排便,喝水,睡眠,蛋白份,高蛋白,蔬菜份,飲食紀錄,垃圾食物
+ * Columns: 日期 步數 運動次(分) 排便 喝水 睡眠 蛋白份 高蛋白 蔬菜份 飲食紀錄 垃圾食物
  * Note: 蛋白份 = meat tags only (低脂肉+中脂肉+高脂肉), 高蛋白 = protein powder cups (separate to avoid double-counting)
  */
 export function generateStructuredData(input: StructuredExportInput): string {
@@ -1057,8 +1066,8 @@ export function generateStructuredData(input: StructuredExportInput): string {
   // Header line
   lines.push(`【W${weekNum}${userName ? ' ' + userName : ''} ${fmtD(startDate)}~${fmtD(endDate)}】`);
 
-  // Column header
-  lines.push('日期,步數,運動(分),排便,喝水,睡眠,蛋白份,高蛋白,蔬菜份,飲食,垃圾');
+  // Column header (tab-separated so paste into spreadsheet splits across columns)
+  lines.push('日期\t步數\t運動(分)\t排便\t喝水\t睡眠\t蛋白份\t高蛋白\t蔬菜份\t飲食\t垃圾');
 
   // One line per day
   for (let i = 0; i < 7; i++) {
@@ -1147,7 +1156,7 @@ export function generateStructuredData(input: StructuredExportInput): string {
     if (b?.junkFood === true) junk = 'Y';
     else if (b?.junkFood === false) junk = 'N';
 
-    lines.push(`${dateStr},${steps},${exercise},${bowel},${water},${sleep},${protein},${powderStr},${veg},${diet},${junk}`);
+    lines.push(`${dateStr}\t${steps}\t${exercise}\t${bowel}\t${water}\t${sleep}\t${protein}\t${powderStr}\t${veg}\t${diet}\t${junk}`);
   }
 
   return lines.join('\n');
