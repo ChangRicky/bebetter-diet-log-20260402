@@ -12,10 +12,13 @@ export interface BehaviorDraft {
   exercise: boolean | null;
   exerciseNote: string;
   exerciseDuration: string;
+  exercise2Note: string;
+  exercise2Duration: string;
   stepsCount: string;
   sleep: string | null;
   sleepQuality: string | null;
   bedtime?: string;
+  sleepNote?: string;
   bowel: string | null;
   bowelNote?: string;
   junkFood?: boolean | null;
@@ -30,6 +33,7 @@ export interface MealDraft {
   mealType: string;
   note: string;
   showNote: boolean;
+  recordDate?: string;
   /** If duplicated from history, marks this as a duplicate */
   duplicated?: boolean;
   savedAt: number;

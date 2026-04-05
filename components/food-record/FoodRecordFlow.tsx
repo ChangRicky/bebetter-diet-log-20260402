@@ -62,7 +62,7 @@ export const FoodRecordFlow: React.FC<FoodRecordFlowProps> = ({ onRecordSaved })
     setDuplicatedImageUrl('');
   }, []);
 
-  const handleTagComplete = useCallback(async (data: { mealType: MealType; items: FoodItem[]; note: string }) => {
+  const handleTagComplete = useCallback(async (data: { mealType: MealType; items: FoodItem[]; note: string; recordDate: string }) => {
     // If we have a duplicated image (no File), use the dataUrl directly
     const resolveImageUrl = (): Promise<string> => {
       if (duplicatedImageUrl) return Promise.resolve(duplicatedImageUrl);
@@ -77,6 +77,14 @@ export const FoodRecordFlow: React.FC<FoodRecordFlowProps> = ({ onRecordSaved })
     try {
       const imageDataUrl = await resolveImageUrl();
       const now = new Date();
+      // If recording a past date, adjust timestamp to that date's noon
+      const recordingDate = data.recordDate;
+      let ts = now.getTime();
+      if (recordingDate) {
+        const rd = new Date(recordingDate + 'T12:00:00');
+        if (rd.getTime() < now.getTime()) ts = rd.getTime();
+      }
+
       const newRecord: MealRecord = {
         id: now.toISOString(),
         type: 'meal',
@@ -84,8 +92,9 @@ export const FoodRecordFlow: React.FC<FoodRecordFlowProps> = ({ onRecordSaved })
         items: data.items,
         note: data.note,
         aiAnalysis: '',
-        timestamp: now.getTime(),
+        timestamp: ts,
         mealType: data.mealType,
+        recordDate: recordingDate,
       };
 
       await saveRecord(newRecord);

@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FOOD_TAGS, MEAL_TYPES, snapToHalf, sortTags } from '../../constants';
+import { FOOD_TAGS, MEAL_TYPES, snapToHalf, sortTags, toDateString } from '../../constants';
 import { saveMealDraft, loadMealDraft, clearMealDraft } from '../../services/draftStorage';
 import type { MealType, FoodTag, FoodItem, FoodTagEntry } from '../../types';
 
 interface MealTaggerProps {
   imagePreviewUrl: string;
   initialMealType: MealType;
-  onComplete: (data: { mealType: MealType; items: FoodItem[]; note: string }) => void;
+  onComplete: (data: { mealType: MealType; items: FoodItem[]; note: string; recordDate: string }) => void;
   onBack: () => void;
   /** True if this is a duplicated record from history */
   isDuplicated?: boolean;
@@ -31,11 +31,12 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
   );
   const [note, setNote] = useState(savedDraft.current?.note ?? '');
   const [showNote, setShowNote] = useState(savedDraft.current?.showNote ?? false);
+  const [recordDate, setRecordDate] = useState(savedDraft.current?.recordDate ?? toDateString(new Date()));
 
   // Auto-save draft
   useEffect(() => {
-    saveMealDraft({ items, mealType, note, showNote });
-  }, [items, mealType, note, showNote]);
+    saveMealDraft({ items, mealType, note, showNote, recordDate });
+  }, [items, mealType, note, showNote, recordDate]);
 
   const updateItem = (index: number, patch: Partial<FoodItem>) => {
     setItems(prev => prev.map((item, i) => i === index ? { ...item, ...patch } : item));
@@ -91,7 +92,7 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
       .filter(item => item.name.trim() !== '' && item.tags.length > 0)
       .map(item => ({ ...item, tags: sortTags(item.tags) }));
     clearMealDraft();
-    onComplete({ mealType, items: validItems, note });
+    onComplete({ mealType, items: validItems, note, recordDate });
   };
 
   return (
@@ -138,6 +139,23 @@ export const MealTagger: React.FC<MealTaggerProps> = ({
       {items.some(i => i.name.trim() && i.tags.length > 0) && (
         <p className="text-xs text-green-500 text-center">💾 已自動暫存，關掉再回來不會消失</p>
       )}
+
+      {/* Record date */}
+      <div>
+        <label className="block text-sm font-medium text-gray-500 mb-2">用餐日期</label>
+        <input
+          type="date"
+          value={recordDate}
+          onChange={(e) => setRecordDate(e.target.value)}
+          max={toDateString(new Date())}
+          className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50 focus:border-[#efa93b]"
+        />
+        {recordDate !== toDateString(new Date()) && (
+          <p className="text-xs text-[#d0502a] mt-1 font-medium">
+            正在記錄 {recordDate} 的飲食（非今天）
+          </p>
+        )}
+      </div>
 
       {/* Meal type */}
       <div>

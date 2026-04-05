@@ -167,10 +167,13 @@ const BehaviorCard: React.FC<{ record: BehaviorRecord; onDuplicate?: () => void 
       exercise: record.exercise,
       exerciseNote: record.exerciseNote || '',
       exerciseDuration: record.exerciseDuration || '',
+      exercise2Note: record.exercise2Note || '',
+      exercise2Duration: record.exercise2Duration || '',
       stepsCount: record.stepsCount || '',
       sleep: record.sleep,
       sleepQuality: record.sleepQuality,
       bedtime: record.bedtime || '',
+      sleepNote: record.sleepNote || '',
       bowel: record.bowel,
       bowelNote: record.bowelNote || '',
       junkFood: record.junkFood ?? null,
@@ -188,9 +191,9 @@ const BehaviorCard: React.FC<{ record: BehaviorRecord; onDuplicate?: () => void 
   const items = [
     { icon: '💧', label: '喝水', value: record.waterMl != null ? `${record.waterMl}ml` : null },
     { icon: '🥛', label: '蛋白', value: record.proteinCups != null ? `${record.proteinCups}杯` : null },
-    { icon: '🏃', label: '運動', value: record.exercise === true ? (record.exerciseNote || '有') : record.exercise === false ? '沒有' : null },
+    { icon: '🏃', label: '運動', value: record.exercise === true ? ([record.exerciseNote || '有', record.exercise2Note].filter(Boolean).join(' + ') + (record.exerciseDuration ? ` ${record.exerciseDuration}分` : '') + (record.exercise2Duration ? `+${record.exercise2Duration}分` : '')) : record.exercise === false ? '沒有' : null },
     { icon: '🚶', label: '步數', value: record.stepsCount ? `${record.stepsCount}步` : null },
-    { icon: '😴', label: '睡眠', value: record.sleep ? `${record.sleep}${record.sleepQuality ? `(${record.sleepQuality})` : ''}${record.bedtime ? ` ${record.bedtime}就寢` : ''}` : record.bedtime ? `${record.bedtime}就寢` : null },
+    { icon: '😴', label: '睡眠', value: record.sleep ? `${record.sleep}${record.sleepQuality ? `(${record.sleepQuality})` : ''}${record.bedtime ? ` ${record.bedtime}就寢` : ''}${record.sleepNote?.trim() ? ` ${record.sleepNote}` : ''}` : record.bedtime ? `${record.bedtime}就寢` : null },
     { icon: '🚽', label: '排便', value: bowelDisplay },
     { icon: '🚫', label: '垃圾食物', value: record.junkFood === true ? '有吃' : record.junkFood === false ? '沒有' : null },
     { icon: '💊', label: '保健品', value: record.supplements?.trim() || null },
@@ -378,11 +381,14 @@ function buildWeeks(records: AppRecord[], periods: CoursePeriod[]): WeekData[] {
   return weeks;
 }
 
-/** Group records by date string */
+/** Group records by date string — uses recordDate when available */
 function groupByDate(records: AppRecord[]): Map<string, AppRecord[]> {
   const map = new Map<string, AppRecord[]>();
   for (const r of records) {
-    const d = new Date(r.timestamp);
+    // Use recordDate if available (for both meal and behavior records)
+    const rdStr = r.type === 'behavior' ? (r as BehaviorRecord).recordDate
+      : (r as MealRecord).recordDate;
+    const d = rdStr ? new Date(rdStr + 'T00:00:00') : new Date(r.timestamp);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(r);
@@ -901,9 +907,15 @@ const DayRecordRow: React.FC<{ record: AppRecord }> = ({ record }) => {
   const parts: string[] = [];
   if (beh.waterMl != null) parts.push(`💧${beh.waterMl}ml`);
   if (beh.proteinCups != null) parts.push(`🥛${beh.proteinCups}杯`);
-  if (beh.exercise === true) parts.push(`🏃${beh.exerciseNote || '有'}${beh.exerciseDuration ? ` ${beh.exerciseDuration}分` : ''}`);
+  if (beh.exercise === true) {
+    const ex1 = beh.exerciseNote || '有';
+    const ex2 = beh.exercise2Note ? `+${beh.exercise2Note}` : '';
+    const dur1 = beh.exerciseDuration ? `${beh.exerciseDuration}分` : '';
+    const dur2 = beh.exercise2Duration ? `+${beh.exercise2Duration}分` : '';
+    parts.push(`🏃${ex1}${ex2} ${dur1}${dur2}`.trim());
+  }
   if (beh.stepsCount) parts.push(`🚶${Number(beh.stepsCount).toLocaleString()}步`);
-  if (beh.sleep) parts.push(`😴${beh.sleep}${beh.sleepQuality ? `(${beh.sleepQuality})` : ''}`);
+  if (beh.sleep) parts.push(`😴${beh.sleep}${beh.sleepQuality ? `(${beh.sleepQuality})` : ''}${beh.sleepNote?.trim() ? ` ${beh.sleepNote}` : ''}`);
   if (beh.bowel) parts.push(`🚽${beh.bowel}${beh.bowelNote?.trim() ? `(${beh.bowelNote})` : ''}`);
   if (beh.junkFood === true) parts.push('🚫有吃垃圾食物');
   else if (beh.junkFood === false) parts.push('🚫沒吃垃圾食物');

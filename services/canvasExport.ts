@@ -349,8 +349,13 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
     : null;
   let exerciseVal: string | null = null;
   if (record.exercise === true) {
-    const parts = [record.exerciseNote || '有', record.exerciseDuration ? `${record.exerciseDuration} 分鐘` : ''].filter(Boolean);
-    exerciseVal = parts.join('・');
+    const ex1Parts = [record.exerciseNote || '有', record.exerciseDuration ? `${record.exerciseDuration}分鐘` : ''].filter(Boolean);
+    let val = ex1Parts.join('・');
+    if (record.exercise2Note?.trim()) {
+      const ex2Parts = [record.exercise2Note, record.exercise2Duration ? `${record.exercise2Duration}分鐘` : ''].filter(Boolean);
+      val += ` + ${ex2Parts.join('・')}`;
+    }
+    exerciseVal = val;
   } else if (record.exercise === false) {
     exerciseVal = '沒有';
   }
@@ -360,6 +365,7 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
     const parts: string[] = [record.sleep];
     if (record.sleepQuality) parts.push(`（${record.sleepQuality}）`);
     if (record.bedtime) parts.push(`・${record.bedtime}就寢`);
+    if (record.sleepNote?.trim()) parts.push(`・${record.sleepNote}`);
     sleepVal = parts.join('');
   } else if (record.bedtime) {
     sleepVal = `${record.bedtime}就寢`;
@@ -1036,10 +1042,10 @@ export function generateStructuredData(input: StructuredExportInput): string {
     dayBehaviors[dayIdx] = b;
   }
 
-  // Meal records per day
+  // Meal records per day — use recordDate if available
   const dayMeals: MealRecord[][] = Array.from({ length: 7 }, () => []);
   for (const m of mealRecords) {
-    const d = new Date(m.timestamp);
+    const d = m.recordDate ? new Date(m.recordDate + 'T00:00:00') : new Date(m.timestamp);
     const dayIdx = (d.getDay() + 6) % 7;
     dayMeals[dayIdx].push(m);
   }
@@ -1064,10 +1070,14 @@ export function generateStructuredData(input: StructuredExportInput): string {
     // Steps
     const steps = b?.stepsCount || '';
 
-    // Exercise: "次數(分鐘)" — total duration for the day
+    // Exercise: "次數(總分鐘)" — combine both exercise types
     let exercise = '';
     if (b?.exercise === true) {
-      exercise = `1(${b.exerciseDuration || '0'})`;
+      const dur1 = Number(b.exerciseDuration) || 0;
+      const dur2 = Number(b.exercise2Duration) || 0;
+      const totalDur = dur1 + dur2;
+      const count = 1 + (b.exercise2Note?.trim() ? 1 : 0);
+      exercise = `${count}(${totalDur})`;
     } else if (b?.exercise === false) {
       exercise = '0(0)';
     }

@@ -25,10 +25,14 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
   const [exercise, setExercise] = useState<boolean | null>(draft.current?.exercise ?? null);
   const [exerciseNote, setExerciseNote] = useState(draft.current?.exerciseNote ?? '');
   const [exerciseDuration, setExerciseDuration] = useState(draft.current?.exerciseDuration ?? '');
+  const [exercise2Note, setExercise2Note] = useState(draft.current?.exercise2Note ?? '');
+  const [exercise2Duration, setExercise2Duration] = useState(draft.current?.exercise2Duration ?? '');
+  const [showExercise2, setShowExercise2] = useState(!!(draft.current?.exercise2Note || draft.current?.exercise2Duration));
   const [stepsCount, setStepsCount] = useState(draft.current?.stepsCount ?? '');
   const [sleep, setSleep] = useState<SleepLevel | null>((draft.current?.sleep as SleepLevel) ?? null);
   const [sleepQuality, setSleepQuality] = useState<SleepQuality | null>((draft.current?.sleepQuality as SleepQuality) ?? null);
   const [bedtime, setBedtime] = useState(draft.current?.bedtime ?? '');
+  const [sleepNote, setSleepNote] = useState(draft.current?.sleepNote ?? '');
   const [bowel, setBowel] = useState<BowelCount | null>((draft.current?.bowel as BowelCount) ?? null);
   const [bowelNote, setBowelNote] = useState(draft.current?.bowelNote ?? '');
   const [junkFood, setJunkFood] = useState<boolean | null>(draft.current?.junkFood ?? null);
@@ -44,10 +48,10 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
     if (cardImageUrl) return; // Don't save after submission
     saveBehaviorDraft({
       recordDate, waterMl, customWater, proteinCups, proteinGrams,
-      exercise, exerciseNote, exerciseDuration, stepsCount,
-      sleep, sleepQuality, bedtime, bowel, bowelNote, junkFood, supplements, generalNote, cardTheme,
+      exercise, exerciseNote, exerciseDuration, exercise2Note, exercise2Duration, stepsCount,
+      sleep, sleepQuality, bedtime, sleepNote, bowel, bowelNote, junkFood, supplements, generalNote, cardTheme,
     });
-  }, [recordDate, waterMl, customWater, proteinCups, proteinGrams, exercise, exerciseNote, exerciseDuration, stepsCount, sleep, sleepQuality, bedtime, bowel, bowelNote, junkFood, supplements, generalNote, cardTheme, cardImageUrl]);
+  }, [recordDate, waterMl, customWater, proteinCups, proteinGrams, exercise, exerciseNote, exerciseDuration, exercise2Note, exercise2Duration, stepsCount, sleep, sleepQuality, bedtime, sleepNote, bowel, bowelNote, junkFood, supplements, generalNote, cardTheme, cardImageUrl]);
 
   const hasAnyValue = waterMl !== null || proteinCups !== null || exercise !== null ||
     stepsCount !== '' || sleep !== null || bowel !== null || junkFood !== null;
@@ -73,7 +77,9 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
       recordDate,
       waterMl, proteinCups, proteinGrams,
       exercise, exerciseNote, exerciseDuration,
+      exercise2Note, exercise2Duration,
       stepsCount, sleep, sleepQuality, bedtime: bedtime || '',
+      sleepNote: sleepNote || '',
       bowel, bowelNote: bowelNote || '', junkFood, supplements: supplements || '', generalNote, cardTheme,
     };
 
@@ -106,7 +112,8 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
     setWaterMl(null); setCustomWater('');
     setProteinCups(null); setShowProteinDetail(false); setProteinGrams('');
     setExercise(null); setExerciseNote(''); setExerciseDuration('');
-    setStepsCount(''); setSleep(null); setSleepQuality(null); setBedtime('');
+    setExercise2Note(''); setExercise2Duration(''); setShowExercise2(false);
+    setStepsCount(''); setSleep(null); setSleepQuality(null); setBedtime(''); setSleepNote('');
     setBowel(null); setBowelNote(''); setJunkFood(null); setSupplements(''); setGeneralNote(''); setCardTheme('dark'); setCardImageUrl(null);
     clearBehaviorDraft();
   };
@@ -229,31 +236,63 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
 
         {/* 運動 */}
         <Card icon="🏃" label="運動">
+          <p className="text-xs text-gray-500 mb-2">以一整天加起來的總量為主，不同類型可分開填寫</p>
           <div className="flex gap-2 mb-2">
             <ToggleBtn label="有做" active={exercise === true} onClick={() => setExercise(true)} activeClass="bg-[#d0502a] text-white" />
             <ToggleBtn label="沒有" active={exercise === false} onClick={() => setExercise(false)} activeClass="bg-red-400 text-white" />
           </div>
           {exercise === true && (
-            <div className="flex gap-2 mt-2">
-              <input
-                type="text"
-                value={exerciseNote}
-                onChange={(e) => setExerciseNote(e.target.value)}
-                placeholder="做什麼運動？"
-                className="flex-1 p-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
-              />
-              <div className="flex items-center gap-1">
+            <>
+              <div className="flex gap-2 mt-2">
                 <input
-                  type="number"
-                  value={exerciseDuration}
-                  onChange={(e) => setExerciseDuration(e.target.value)}
-                  placeholder="幾分鐘"
-                  className="w-20 p-2.5 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
-                  min="0"
+                  type="text"
+                  value={exerciseNote}
+                  onChange={(e) => setExerciseNote(e.target.value)}
+                  placeholder="運動類型（例：快走、有氧）"
+                  className="flex-1 p-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
                 />
-                <span className="text-sm text-gray-500">分鐘</span>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    value={exerciseDuration}
+                    onChange={(e) => setExerciseDuration(e.target.value)}
+                    placeholder="分鐘"
+                    className="w-20 p-2.5 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
+                    min="0"
+                  />
+                  <span className="text-sm text-gray-500">分鐘</span>
+                </div>
               </div>
-            </div>
+              {!showExercise2 ? (
+                <button
+                  onClick={() => setShowExercise2(true)}
+                  className="mt-2 text-xs text-[#d0502a] font-medium underline"
+                >
+                  + 新增第二種運動
+                </button>
+              ) : (
+                <div className="flex gap-2 mt-2">
+                  <input
+                    type="text"
+                    value={exercise2Note}
+                    onChange={(e) => setExercise2Note(e.target.value)}
+                    placeholder="第二種運動（例：重訓）"
+                    className="flex-1 p-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
+                  />
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={exercise2Duration}
+                      onChange={(e) => setExercise2Duration(e.target.value)}
+                      placeholder="分鐘"
+                      className="w-20 p-2.5 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
+                      min="0"
+                    />
+                    <span className="text-sm text-gray-500">分鐘</span>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </Card>
 
@@ -274,26 +313,35 @@ export const DailyChecklist: React.FC<DailyChecklistProps> = ({ onRecordSaved })
 
         {/* 睡眠 */}
         <Card icon="😴" label="睡眠">
-          <p className="text-xs text-gray-400 mb-2">睡眠時數</p>
+          <p className="text-xs text-gray-600 font-medium mb-2">睡眠時數</p>
           <SegmentedControl
             options={SLEEP_LEVELS}
             value={sleep}
             onChange={setSleep}
             colorMap={{ '<6hr': 'bg-red-500 text-white', '6-7hr': 'bg-yellow-500 text-white', '7-8hr': 'bg-[#d0502a] text-white', '8hr+': 'bg-[#d0502a] text-white' }}
           />
-          <p className="text-xs text-gray-400 mt-3 mb-2">睡眠品質</p>
+          <p className="text-xs text-gray-600 font-medium mt-3 mb-2">睡眠品質</p>
           <SegmentedControl
             options={SLEEP_QUALITIES}
             value={sleepQuality}
             onChange={setSleepQuality}
             colorMap={{ '很好': 'bg-[#d0502a] text-white', '不錯': 'bg-[#d0502a] text-white', '還好': 'bg-yellow-500 text-white', '不太好': 'bg-orange-500 text-white', '很差': 'bg-red-500 text-white' }}
           />
-          <p className="text-xs text-gray-400 mt-3 mb-2">就寢時間</p>
+          <p className="text-xs text-gray-600 font-medium mt-3 mb-2">就寢時間</p>
           <input
             type="time"
             value={bedtime}
             onChange={(e) => setBedtime(e.target.value)}
             className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50 focus:border-[#efa93b]"
+            style={{ fontSize: '16px' }}
+          />
+          <p className="text-xs text-gray-600 font-medium mt-3 mb-2">睡眠備註</p>
+          <input
+            type="text"
+            value={sleepNote}
+            onChange={(e) => setSleepNote(e.target.value)}
+            placeholder="例：淺眠、做夢、中途醒來、失眠..."
+            className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#efa93b]/50"
             style={{ fontSize: '16px' }}
           />
         </Card>
@@ -391,7 +439,7 @@ const Card: React.FC<{ icon: string; label: string; subLabel?: string; children:
     <div className="flex items-center gap-2 mb-3">
       <span className="text-xl">{icon}</span>
       <span className="font-semibold text-gray-700">{label}</span>
-      {subLabel && <span className="text-xs text-gray-400">{subLabel}</span>}
+      {subLabel && <span className="text-xs text-gray-500">{subLabel}</span>}
     </div>
     {children}
   </div>

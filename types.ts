@@ -23,6 +23,8 @@ export interface MealRecord {
   aiAnalysis: string;
   timestamp: number;
   mealType: MealType;
+  /** The date this meal actually occurred (may differ from timestamp if recording past meals) */
+  recordDate?: string;          // YYYY-MM-DD
 }
 
 export type SleepLevel = '<6hr' | '6-7hr' | '7-8hr' | '8hr+';
@@ -41,10 +43,13 @@ export interface BehaviorRecord {
   exercise: boolean | null;
   exerciseNote: string;
   exerciseDuration: string;
+  exercise2Note: string;        // 第二種運動（例：重訓）
+  exercise2Duration: string;    // 第二種運動時長
   stepsCount: string;
   sleep: SleepLevel | null;
   sleepQuality: SleepQuality | null;
   bedtime: string;              // e.g. "23:30"
+  sleepNote: string;            // 睡眠備註（例：淺眠、做夢、中途醒來）
   bowel: BowelCount | null;
   bowelNote: string;            // 排便備註
   junkFood: boolean | null;     // 垃圾食物（有吃=true, 沒吃=false）
