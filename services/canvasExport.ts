@@ -1,13 +1,15 @@
 import type { MealRecord, BehaviorRecord, FoodItem, FoodTag } from '../types';
 import { CARD_THEMES, sortTags, FOOD_TAGS, SLEEP_QUALITY_SCORE, BOWEL_TO_NUMBER, DEFAULT_PROTEIN_GRAMS_PER_CUP, PROTEIN_GRAMS_PER_SERVING } from '../constants';
 
+const EXPORT_VERSION = 'v6.1';
+
 const CARD_WIDTH = 1080;
 const PAD = 48;
 const BRAND_FONT_SIZE = 28;
 const TITLE_FONT_SIZE = 34;
 const CHIP_FONT_SIZE = 38;    // meal card chip text (enlarged for nutritionist readability)
 const BEHAVIOR_FONT_SIZE = 32; // behavior card row text
-const NOTE_FONT_SIZE = 26;
+const NOTE_FONT_SIZE = 30;    // note text (enlarged for readability)
 const LINE_HEIGHT = 1.6;
 const CHIP_PADDING_H = 24;
 const CHIP_PADDING_V = 12;
@@ -95,7 +97,7 @@ function drawBrandFooter(ctx: CanvasRenderingContext2D, y: number, width: number
 
   ctx.font = `24px "Noto Sans TC", sans-serif`;
   ctx.fillStyle = light ? '#6B7280' : 'rgba(255,255,255,0.5)';
-  ctx.fillText(' — 陪你成為更好的自己', PAD + bw, centerY);
+  ctx.fillText(` — 陪你成為更好的自己  ${EXPORT_VERSION}`, PAD + bw, centerY);
 
   // User name (right side)
   if (userName) {
@@ -145,7 +147,7 @@ export async function composeMealCard(record: MealRecord, userName?: string | nu
     + (noteSectionH > 0 ? noteSectionH + 8 : 0)
     + PAD;
 
-  const brandFooterH = 59;
+  const brandFooterH = 75; // matches enlarged drawBrandFooter
   const totalHeight = photoDrawHeight + infoH + brandFooterH;
 
   const canvas = document.createElement('canvas');
@@ -215,9 +217,9 @@ export async function composeMealCard(record: MealRecord, userName?: string | nu
     y += 16;
   }
 
-  // Note
+  // Note — darker color for readability
   if (record.note.trim()) {
-    ctx.fillStyle = '#9CA3AF';
+    ctx.fillStyle = '#4B5563';
     ctx.font = `${NOTE_FONT_SIZE}px "Noto Sans TC", sans-serif`;
     for (const line of wrapText(ctx, record.note, CARD_WIDTH - PAD * 2)) {
       ctx.fillText(line, PAD, y);
@@ -424,7 +426,7 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
     ctx.font = `bold ${NOTE_FONT_SIZE}px "Noto Sans TC", sans-serif`;
     ctx.fillText('📝 備註', PAD + 16, y + CHIP_PADDING_V);
     let ny = y + CHIP_PADDING_V + NOTE_FONT_SIZE * LINE_HEIGHT;
-    ctx.fillStyle = MUTED;
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
     ctx.font = `${NOTE_FONT_SIZE}px "Noto Sans TC", sans-serif`;
     for (const line of noteLines) { ctx.fillText(line, PAD + 16, ny); ny += NOTE_FONT_SIZE * LINE_HEIGHT; }
     y += noteBlockH;
@@ -446,7 +448,7 @@ export async function composeBehaviorCard(record: BehaviorRecord, userName?: str
   const bbwBehavior = ctx.measureText('BeBetter').width;
   ctx.font = `26px "Noto Sans TC", sans-serif`;
   ctx.fillStyle = 'rgba(255,255,255,0.75)';
-  ctx.fillText(' — 陪你成為更好的自己', PAD + bbwBehavior, y);
+  ctx.fillText(` — 陪你成為更好的自己  ${EXPORT_VERSION}`, PAD + bbwBehavior, y);
   if (userName) {
     ctx.font = `bold 26px "Noto Sans TC", sans-serif`;
     ctx.fillStyle = 'rgba(255,255,255,0.8)';
@@ -548,12 +550,12 @@ export async function composeWeeklyReport(input: WeeklyReportInput): Promise<str
 
   const canvas = document.createElement('canvas');
   canvas.width = CARD_W;
-  canvas.height = totalH + 100; // extra buffer to prevent cutoff
+  canvas.height = totalH + 400; // generous buffer — canvas gets trimmed to actual height
   const ctx = canvas.getContext('2d')!;
 
-  // Background
+  // Background — fill entire buffer area
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, CARD_W, totalH);
+  ctx.fillRect(0, 0, CARD_W, canvas.height);
 
   let y = PAD;
 
@@ -725,7 +727,7 @@ export async function composeWeeklyReport(input: WeeklyReportInput): Promise<str
   const bbw = ctx.measureText('BeBetter').width;
   ctx.font = `22px "Noto Sans TC", sans-serif`;
   ctx.fillStyle = '#6B7280';
-  ctx.fillText(' — 陪你成為更好的自己', PAD + bbw, y + 35);
+  ctx.fillText(` — 陪你成為更好的自己  ${EXPORT_VERSION}`, PAD + bbw, y + 35);
 
   if (userName) {
     ctx.font = `bold 24px "Noto Sans TC", sans-serif`;
@@ -1009,7 +1011,7 @@ export async function composeProgramSummary(input: ProgramSummaryInput): Promise
   const progBw = ctx.measureText('BeBetter').width;
   ctx.font = `24px "Noto Sans TC", sans-serif`;
   ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.fillText(' — 陪你成為更好的自己', T_PAD + progBw, y);
+  ctx.fillText(` — 陪你成為更好的自己  ${EXPORT_VERSION}`, T_PAD + progBw, y);
   ctx.globalAlpha = 1;
   y += 44;
 
@@ -1034,8 +1036,8 @@ interface StructuredExportInput {
 
 /**
  * Generate structured data for nutritionist Excel.
- * Format: each day = one line, TAB-separated (splits into columns when pasted in Excel/Numbers).
- * Title line is plain text (not tab-separated).
+ * Format: each day = one line, COMMA-separated (survives LINE messaging).
+ * Excel parses CSV from single-column paste using SUBSTITUTE+MID formulas.
  *
  * Columns: 日期 步數 運動次(分) 排便 喝水 睡眠 蛋白份 高蛋白 蔬菜份 飲食紀錄 垃圾食物
  * Note: 蛋白份 = meat tags only (低脂肉+中脂肉+高脂肉), 高蛋白 = protein powder cups (separate to avoid double-counting)
@@ -1066,8 +1068,8 @@ export function generateStructuredData(input: StructuredExportInput): string {
   // Header line
   lines.push(`【W${weekNum}${userName ? ' ' + userName : ''} ${fmtD(startDate)}~${fmtD(endDate)}】`);
 
-  // Column header (tab-separated so paste into spreadsheet splits across columns)
-  lines.push('日期\t步數\t運動(分)\t排便\t喝水\t睡眠\t蛋白份\t高蛋白\t蔬菜份\t飲食\t垃圾');
+  // Column header (comma-separated — survives LINE messaging)
+  lines.push('日期,步數,運動(分),排便,喝水,睡眠,蛋白份,高蛋白,蔬菜份,飲食,垃圾');
 
   // One line per day
   for (let i = 0; i < 7; i++) {
@@ -1156,7 +1158,7 @@ export function generateStructuredData(input: StructuredExportInput): string {
     if (b?.junkFood === true) junk = 'Y';
     else if (b?.junkFood === false) junk = 'N';
 
-    lines.push(`${dateStr}\t${steps}\t${exercise}\t${bowel}\t${water}\t${sleep}\t${protein}\t${powderStr}\t${veg}\t${diet}\t${junk}`);
+    lines.push(`${dateStr},${steps},${exercise},${bowel},${water},${sleep},${protein},${powderStr},${veg},${diet},${junk}`);
   }
 
   return lines.join('\n');
