@@ -500,6 +500,33 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
     alert(`✅ 數據已複製！\n\n請接著按「匯出 W${exportWeekNum} 週報」，\n將週報圖片和數據一起分享給營養師 📤`);
   };
 
+  const handleDownloadCsv = (week: WeekData) => {
+    const behaviors = week.records.filter(r => r.type === 'behavior') as BehaviorRecord[];
+    const meals = week.records.filter(r => r.type === 'meal') as MealRecord[];
+    const exportWeekNum = week.globalWeekNum > 0 ? week.globalWeekNum : week.weekNum;
+    const text = generateStructuredData({
+      weekNum: exportWeekNum,
+      startDate: week.startDate,
+      behaviorRecords: behaviors,
+      mealRecords: meals,
+      userName,
+    });
+    // Convert comma-separated lines to proper CSV file
+    const lines = text.split('\n');
+    // Skip title line (first line), keep column header + 7 data rows
+    const csvContent = lines.slice(1).join('\n');
+    const bom = '\uFEFF'; // UTF-8 BOM for Excel to recognize Chinese
+    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `BeBetter-W${exportWeekNum}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleExportPeriod = async (period: CoursePeriod) => {
     setExportingProgram(period.id);
     try {
@@ -856,17 +883,25 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
 
                     {/* Action buttons — not for practice weeks */}
                     {!week.isPractice && (
-                      <div className="flex gap-2 mt-1">
-                        <button
-                          onClick={() => handleCopyData(week)}
-                          className="py-2.5 px-3 text-sm font-semibold text-[#d0502a] bg-[#FFF3E8] rounded-lg active:bg-[#FFE8D6]"
-                        >
-                          📋 複製數據
-                        </button>
+                      <div className="space-y-1.5 mt-1">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleCopyData(week)}
+                            className="py-2.5 px-3 text-sm font-semibold text-[#d0502a] bg-[#FFF3E8] rounded-lg active:bg-[#FFE8D6]"
+                          >
+                            📋 複製數據
+                          </button>
+                          <button
+                            onClick={() => handleDownloadCsv(week)}
+                            className="py-2.5 px-3 text-sm font-semibold text-[#1B4332] bg-[#E2EFDA] rounded-lg active:bg-[#C6EFCE]"
+                          >
+                            📥 下載 CSV
+                          </button>
+                        </div>
                         <button
                           onClick={() => handleExportWeek(week)}
                           disabled={exportingWeek === wk}
-                          className="flex-1 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg active:bg-gray-200 disabled:opacity-50"
+                          className="w-full py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg active:bg-gray-200 disabled:opacity-50"
                         >
                           {exportingWeek === wk ? '匯出中...' : `📤 匯出 W${week.globalWeekNum || week.weekNum} 週報`}
                         </button>
