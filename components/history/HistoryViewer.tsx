@@ -416,10 +416,51 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
   const streakWeeks = weeks.filter(w => w.records.length > 0).length;
   const userName = getLiffUserName();
 
+  // ── Course plan validation helpers ──
+  const existingMain = periods.find(p => {
+    const plan = COURSE_PLANS.find(c => c.id === p.planId);
+    return plan?.isMain;
+  });
+  const existingMainPlanId = existingMain?.planId as CoursePlanId | undefined;
+  const hasExtension = periods.some(p => !COURSE_PLANS.find(c => c.id === p.planId)?.isMain);
+
+  // Which extension is allowed based on the main plan
+  const allowedExtension: CoursePlanId | null =
+    existingMainPlanId === 'premium' ? 'loop_full'
+    : existingMainPlanId === 'standard' ? 'loop_lite'
+    : null;
+
+  // Smart default start date for extension = day after main plan ends
+  const suggestedExtensionStart = (): string => {
+    if (!existingMain) return '';
+    const end = new Date(existingMain.startDate + 'T00:00:00');
+    end.setDate(end.getDate() + existingMain.weeks * 7);
+    return end.toISOString().slice(0, 10);
+  };
+
   const addPeriod = () => {
     if (!newPlanId || !newStartDate) return;
     const plan = COURSE_PLANS.find(p => p.id === newPlanId);
     if (!plan) return;
+
+    // Validation: can't add two main plans
+    if (plan.isMain && existingMain) {
+      alert('已經有主方案了，不能同時設定兩個主方案。\n如需更換，請先刪除現有主方案或使用「重新開始」。');
+      return;
+    }
+    // Validation: extension must match main plan
+    if (!plan.isMain) {
+      if (!existingMain) {
+        alert('請先新增主方案（Premium 或 Standard），再加購延長方案。');
+        return;
+      }
+      if (plan.id !== allowedExtension) {
+        const correct = existingMainPlanId === 'premium' ? 'Loop Full' : 'Loop Lite';
+        alert(`${existingMain.label} 只能搭配 ${correct} 延長方案。`);
+        return;
+      }
+    }
+
     const newPeriod: CoursePeriod = {
       id: Date.now().toString(),
       planId: newPlanId,
@@ -436,7 +477,20 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
   };
 
   const removePeriod = (id: string) => {
-    const updated = periods.filter(p => p.id !== id);
+    // If removing a main plan, also remove its extension
+    const target = periods.find(p => p.id === id);
+    const plan = target ? COURSE_PLANS.find(c => c.id === target.planId) : null;
+    let updated: CoursePeriod[];
+    if (plan?.isMain) {
+      // Removing main plan also removes extensions
+      updated = periods.filter(p => {
+        if (p.id === id) return false;
+        const pp = COURSE_PLANS.find(c => c.id === p.planId);
+        return pp?.isMain; // keep other main plans (shouldn't exist, but safe)
+      });
+    } else {
+      updated = periods.filter(p => p.id !== id);
+    }
     savePeriods(updated);
     setPeriodsState(updated);
   };
@@ -720,60 +774,91 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
               </div>
             )}
 
-            {/* Add new period */}
+            {/* Add new period / restart */}
             {!addingPeriod ? (
-              <button
-                onClick={() => setAddingPeriod(true)}
-                className="w-full py-2.5 text-sm font-medium text-[#d0502a] border-2 border-dashed border-[#efa93b]/40 rounded-xl active:bg-[#FFF8F0]"
-              >
-                + 新增課程
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setAddingPeriod(true)}
+                  className="flex-1 py-2.5 text-sm font-medium text-[#d0502a] border-2 border-dashed border-[#efa93b]/40 rounded-xl active:bg-[#FFF8F0]"
+                >
+                  {!existingMain ? '+ 新增主方案' : !hasExtension ? '+ 加購延長方案' : '+ 新增課程'}
+                </button>
+                {periods.length > 0 && (
+                  <button
+                    onClick={() => {
+                      if (confirm('確定要重新開始嗎？\n\n這會清除所有課程設定。\n（飲食與行為紀錄不會被刪除）')) {
+                        savePeriods([]);
+                        setPeriodsState([]);
+                      }
+                    }}
+                    className="py-2.5 px-3 text-sm font-medium text-gray-500 border-2 border-dashed border-gray-200 rounded-xl active:bg-gray-50"
+                  >
+                    重新開始
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="bg-[#FFF8F0] rounded-xl p-3 border border-[#efa93b]/30 flex flex-col gap-3">
-                {/* Main plans */}
-                <div>
-                  <p className="text-xs text-gray-500 font-medium mb-2">主方案</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {COURSE_PLANS.filter(p => p.isMain).map((plan) => (
-                      <button
-                        key={plan.id}
-                        onClick={() => setNewPlanId(plan.id)}
-                        className={`p-2.5 rounded-xl text-left transition-all border ${
-                          newPlanId === plan.id
-                            ? 'border-[#d0502a] bg-[#FFF3E8]'
-                            : 'border-gray-200 bg-white active:bg-gray-50'
-                        }`}
-                      >
-                        <p className={`text-xs font-bold ${newPlanId === plan.id ? 'text-[#d0502a]' : 'text-gray-700'}`}>
-                          {plan.label}
-                        </p>
-                        <p className="text-xs text-gray-400">{plan.desc}</p>
-                      </button>
-                    ))}
+                {/* Main plans — only show if no main plan exists */}
+                {!existingMain && (
+                  <div>
+                    <p className="text-xs text-gray-500 font-medium mb-2">選擇主方案</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {COURSE_PLANS.filter(p => p.isMain).map((plan) => (
+                        <button
+                          key={plan.id}
+                          onClick={() => setNewPlanId(plan.id)}
+                          className={`p-2.5 rounded-xl text-left transition-all border ${
+                            newPlanId === plan.id
+                              ? 'border-[#d0502a] bg-[#FFF3E8]'
+                              : 'border-gray-200 bg-white active:bg-gray-50'
+                          }`}
+                        >
+                          <p className={`text-xs font-bold ${newPlanId === plan.id ? 'text-[#d0502a]' : 'text-gray-700'}`}>
+                            {plan.label}
+                          </p>
+                          <p className="text-xs text-gray-400">{plan.desc}</p>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                {/* Extension plans */}
-                <div>
-                  <p className="text-xs text-gray-500 font-medium mb-2">延長方案</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {COURSE_PLANS.filter(p => !p.isMain).map((plan) => (
-                      <button
-                        key={plan.id}
-                        onClick={() => setNewPlanId(plan.id)}
-                        className={`p-2.5 rounded-xl text-left transition-all border ${
-                          newPlanId === plan.id
-                            ? 'border-[#efa93b] bg-[#FFFBF0]'
-                            : 'border-gray-200 bg-white active:bg-gray-50'
-                        }`}
-                      >
-                        <p className={`text-xs font-bold ${newPlanId === plan.id ? 'text-[#c05828]' : 'text-gray-700'}`}>
-                          {plan.label}
-                        </p>
-                        <p className="text-xs text-gray-400">{plan.desc}</p>
-                      </button>
-                    ))}
+                )}
+                {/* Extension plan — only show matching extension based on main plan */}
+                {existingMain && allowedExtension && (
+                  <div>
+                    <p className="text-xs text-gray-500 font-medium mb-2">
+                      延長方案（搭配 {existingMain.label.split(' ')[0]}）
+                    </p>
+                    {(() => {
+                      const plan = COURSE_PLANS.find(p => p.id === allowedExtension)!;
+                      return (
+                        <button
+                          onClick={() => {
+                            setNewPlanId(plan.id);
+                            if (!newStartDate) setNewStartDate(suggestedExtensionStart());
+                          }}
+                          className={`w-full p-2.5 rounded-xl text-left transition-all border ${
+                            newPlanId === plan.id
+                              ? 'border-[#efa93b] bg-[#FFFBF0]'
+                              : 'border-gray-200 bg-white active:bg-gray-50'
+                          }`}
+                        >
+                          <p className={`text-xs font-bold ${newPlanId === plan.id ? 'text-[#c05828]' : 'text-gray-700'}`}>
+                            {plan.label}
+                          </p>
+                          <p className="text-xs text-gray-400">{plan.desc}</p>
+                        </button>
+                      );
+                    })()}
+                    <p className="text-[10px] text-gray-400 mt-1.5">
+                      {hasExtension ? '可多次加購延長方案，週數會持續累計' : `搭配 ${existingMain.label.split(' ')[0]}，可延長 8 週`}
+                    </p>
                   </div>
-                </div>
+                )}
+                {/* If has main but no allowed extension (shouldn't happen, but safe) */}
+                {existingMain && !allowedExtension && (
+                  <p className="text-xs text-gray-500">目前的主方案無法搭配延長方案。</p>
+                )}
                 <div>
                   <p className="text-xs text-gray-500 font-medium mb-2">
                     課程起始日{newPlanId ? ` · ${COURSE_PLANS.find(p => p.id === newPlanId)?.weeks} 週` : ''}
