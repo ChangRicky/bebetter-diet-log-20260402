@@ -7,7 +7,6 @@ import type { AppRecord, MealRecord, BehaviorRecord } from '../../types';
 
 interface HistoryViewerProps {
   records: AppRecord[];
-  onRecordSaved?: () => void;
   onDuplicateMeal?: () => void;
   onDuplicateBehavior?: () => void;
 }
@@ -421,14 +420,7 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
     const plan = COURSE_PLANS.find(c => c.id === p.planId);
     return plan?.isMain;
   });
-  const existingMainPlanId = existingMain?.planId as CoursePlanId | undefined;
   const hasExtension = periods.some(p => !COURSE_PLANS.find(c => c.id === p.planId)?.isMain);
-
-  // Which extension is allowed based on the main plan
-  const allowedExtension: CoursePlanId | null =
-    existingMainPlanId === 'premium' ? 'loop_full'
-    : existingMainPlanId === 'standard' ? 'loop_lite'
-    : null;
 
   // Smart default start date for extension = day after main plan ends
   const suggestedExtensionStart = (): string => {
@@ -448,17 +440,10 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
       alert('已經有主方案了，不能同時設定兩個主方案。\n如需更換，請先刪除現有主方案或使用「重新開始」。');
       return;
     }
-    // Validation: extension must match main plan
-    if (!plan.isMain) {
-      if (!existingMain) {
-        alert('請先新增主方案（Premium 或 Standard），再加購延長方案。');
-        return;
-      }
-      if (plan.id !== allowedExtension) {
-        const correct = existingMainPlanId === 'premium' ? 'Loop Full' : 'Loop Lite';
-        alert(`${existingMain.label} 只能搭配 ${correct} 延長方案。`);
-        return;
-      }
+    // Extension requires a main plan to exist
+    if (!plan.isMain && !existingMain) {
+      alert('請先新增主方案（Premium 或 Standard），再加購延長方案。');
+      return;
     }
 
     const newPeriod: CoursePeriod = {
@@ -552,33 +537,6 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
       document.body.removeChild(ta);
     }
     alert(`✅ 數據已複製！\n\n請接著按「匯出 W${exportWeekNum} 週報」，\n將週報圖片和數據一起分享給營養師 📤`);
-  };
-
-  const handleDownloadCsv = (week: WeekData) => {
-    const behaviors = week.records.filter(r => r.type === 'behavior') as BehaviorRecord[];
-    const meals = week.records.filter(r => r.type === 'meal') as MealRecord[];
-    const exportWeekNum = week.globalWeekNum > 0 ? week.globalWeekNum : week.weekNum;
-    const text = generateStructuredData({
-      weekNum: exportWeekNum,
-      startDate: week.startDate,
-      behaviorRecords: behaviors,
-      mealRecords: meals,
-      userName,
-    });
-    // Convert comma-separated lines to proper CSV file
-    const lines = text.split('\n');
-    // Skip title line (first line), keep column header + 7 data rows
-    const csvContent = lines.slice(1).join('\n');
-    const bom = '\uFEFF'; // UTF-8 BOM for Excel to recognize Chinese
-    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `BeBetter-W${exportWeekNum}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
   const handleExportPeriod = async (period: CoursePeriod) => {
@@ -786,10 +744,16 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
                 {periods.length > 0 && (
                   <button
                     onClick={() => {
-                      if (confirm('確定要重新開始嗎？\n\n這會清除所有課程設定。\n（飲食與行為紀錄不會被刪除）')) {
-                        savePeriods([]);
-                        setPeriodsState([]);
+                      if (!confirm('⚠️ 警告：重新開始會清除所有課程設定！\n\n你確定要繼續嗎？')) return;
+                      if (!confirm('⚠️ 再次確認：\n\n清除後將無法復原課程設定。\n（飲食與行為紀錄不會被刪除）\n\n真的要清除嗎？')) return;
+                      const answer = prompt('最後確認：請輸入「重新開始」四個字以確認清除所有課程設定。');
+                      if (answer !== '重新開始') {
+                        alert('已取消，課程設定保留。');
+                        return;
                       }
+                      savePeriods([]);
+                      setPeriodsState([]);
+                      alert('✅ 課程設定已清除。');
                     }}
                     className="py-2.5 px-3 text-sm font-medium text-gray-500 border-2 border-dashed border-gray-200 rounded-xl active:bg-gray-50"
                   >
@@ -823,21 +787,21 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
                     </div>
                   </div>
                 )}
-                {/* Extension plan — only show matching extension based on main plan */}
-                {existingMain && allowedExtension && (
+                {/* Extension plans — both Loop Full and Loop Lite available */}
+                {existingMain && (
                   <div>
                     <p className="text-xs text-gray-500 font-medium mb-2">
-                      延長方案（搭配 {existingMain.label.split(' ')[0]}）
+                      延長方案（可自由選擇）
                     </p>
-                    {(() => {
-                      const plan = COURSE_PLANS.find(p => p.id === allowedExtension)!;
-                      return (
+                    <div className="grid grid-cols-2 gap-2">
+                      {COURSE_PLANS.filter(p => !p.isMain).map((plan) => (
                         <button
+                          key={plan.id}
                           onClick={() => {
                             setNewPlanId(plan.id);
                             if (!newStartDate) setNewStartDate(suggestedExtensionStart());
                           }}
-                          className={`w-full p-2.5 rounded-xl text-left transition-all border ${
+                          className={`p-2.5 rounded-xl text-left transition-all border ${
                             newPlanId === plan.id
                               ? 'border-[#efa93b] bg-[#FFFBF0]'
                               : 'border-gray-200 bg-white active:bg-gray-50'
@@ -848,16 +812,12 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
                           </p>
                           <p className="text-xs text-gray-400">{plan.desc}</p>
                         </button>
-                      );
-                    })()}
+                      ))}
+                    </div>
                     <p className="text-[10px] text-gray-400 mt-1.5">
-                      {hasExtension ? '可多次加購延長方案，週數會持續累計' : `搭配 ${existingMain.label.split(' ')[0]}，可延長 8 週`}
+                      可多次加購延長方案，週數會持續累計
                     </p>
                   </div>
-                )}
-                {/* If has main but no allowed extension (shouldn't happen, but safe) */}
-                {existingMain && !allowedExtension && (
-                  <p className="text-xs text-gray-500">目前的主方案無法搭配延長方案。</p>
                 )}
                 <div>
                   <p className="text-xs text-gray-500 font-medium mb-2">
@@ -969,20 +929,12 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
                     {/* Action buttons — not for practice weeks */}
                     {!week.isPractice && (
                       <div className="space-y-1.5 mt-1">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleCopyData(week)}
-                            className="py-2.5 px-3 text-sm font-semibold text-[#d0502a] bg-[#FFF3E8] rounded-lg active:bg-[#FFE8D6]"
-                          >
-                            📋 複製數據
-                          </button>
-                          <button
-                            onClick={() => handleDownloadCsv(week)}
-                            className="py-2.5 px-3 text-sm font-semibold text-[#1B4332] bg-[#E2EFDA] rounded-lg active:bg-[#C6EFCE]"
-                          >
-                            📥 下載 CSV
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => handleCopyData(week)}
+                          className="w-full py-2.5 text-sm font-semibold text-[#d0502a] bg-[#FFF3E8] rounded-lg active:bg-[#FFE8D6]"
+                        >
+                          📋 複製數據傳給營養師
+                        </button>
                         <button
                           onClick={() => handleExportWeek(week)}
                           disabled={exportingWeek === wk}

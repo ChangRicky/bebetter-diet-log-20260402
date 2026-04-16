@@ -1,4 +1,5 @@
 import type { AppRecord, MealRecord } from '../types';
+import { syncRecord } from './syncService';
 
 const DB_NAME = 'bebetter-diet';
 const DB_VERSION = 1;
@@ -22,12 +23,14 @@ function openDB(): Promise<IDBDatabase> {
 
 export async function saveRecord(record: AppRecord): Promise<void> {
   const db = await openDB();
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put(record);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+  // Background cloud sync — don't await, don't block UI
+  syncRecord(record).catch(() => {});
 }
 
 export async function getAllRecords(): Promise<AppRecord[]> {

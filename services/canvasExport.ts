@@ -242,15 +242,36 @@ function layoutItemChips(ctx: CanvasRenderingContext2D, items: FoodItem[], maxWi
   let rowX = 0, rowY = 0;
   const chipH = CHIP_FONT_SIZE + CHIP_PADDING_V * 2;
 
+  // Split a label into pieces that each fit maxWidth as a single chip
+  const splitLabel = (label: string): string[] => {
+    const fits = (s: string) => ctx.measureText(s).width + CHIP_PADDING_H * 2 <= maxWidth;
+    if (fits(label)) return [label];
+    const pieces: string[] = [];
+    let cur = '';
+    for (const ch of label) {
+      if (fits(cur + ch)) {
+        cur += ch;
+      } else {
+        if (cur) pieces.push(cur);
+        cur = ch;
+      }
+    }
+    if (cur) pieces.push(cur);
+    return pieces;
+  };
+
   for (const item of items) {
     const tagParts = sortTags(item.tags).map(t => `${t.tag}${fmtQty(t.qty)}`).join(' ');
-    const label = `${item.name}：${tagParts}`;
-    const w = ctx.measureText(label).width + CHIP_PADDING_H * 2;
-    if (rowX + w > maxWidth && curRow.length > 0) {
-      rows.push(curRow); curRow = []; rowX = 0; rowY += chipH + CHIP_GAP;
+    const fullLabel = `${item.name}：${tagParts}`;
+    const labels = splitLabel(fullLabel);
+    for (const label of labels) {
+      const w = ctx.measureText(label).width + CHIP_PADDING_H * 2;
+      if (rowX + w > maxWidth && curRow.length > 0) {
+        rows.push(curRow); curRow = []; rowX = 0; rowY += chipH + CHIP_GAP;
+      }
+      curRow.push({ label, x: rowX, y: rowY, width: w, height: chipH });
+      rowX += w + CHIP_GAP;
     }
-    curRow.push({ label, x: rowX, y: rowY, width: w, height: chipH });
-    rowX += w + CHIP_GAP;
   }
   if (curRow.length > 0) rows.push(curRow);
   return rows;

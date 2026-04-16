@@ -1,39 +1,33 @@
+/**
+ * Gemini food image analysis — calls via Supabase Edge Function
+ * so the API key never leaves the server.
+ */
 
-import { GoogleGenAI } from "@google/genai";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? ''
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
 
-const API_KEY = process.env.API_KEY || '';
-
-const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
-
-const fileToGenerativePart = (base64: string, mimeType: string) => {
-  return {
-    inlineData: {
-      data: base64,
-      mimeType,
-    },
-  };
-};
+const EDGE_URL = SUPABASE_URL
+  ? `${SUPABASE_URL}/functions/v1/analyze-food-image`
+  : ''
 
 export const analyzeMealImage = async (base64Image: string, mimeType: string): Promise<string> => {
-  if (!ai) return 'AI 分析功能未啟用（缺少 API Key）';
+  if (!EDGE_URL) return 'AI 分析功能未啟用（缺少 Supabase 設定）'
   try {
-    const imagePart = fileToGenerativePart(base64Image, mimeType);
-    const prompt = `請針對這張圖片中的食物進行營養分析。
-    - 分析結果請用繁體中文呈現。
-    - 格式要清晰易懂，適合長輩閱讀。
-    - 先條列式列出圖片中的主要食物。
-    - 接著，提供一個簡單的總結和建議。
-    - 請不要使用任何 markdown 符號，例如 '#' 或 '*'。
-    - 整個回覆請用純文字，方便閱讀。`;
+    const res = await fetch(EDGE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ base64Image, mimeType }),
+    })
 
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: { parts: [imagePart, { text: prompt }] },
-    });
-    
-    return response.text;
+    const data = await res.json()
+    if (!data.ok) return data.error ?? 'AI分析時發生錯誤，請稍後再試。'
+    return data.text
   } catch (error) {
-    console.error("Error analyzing image with Gemini API:", error);
-    return "AI分析時發生錯誤，請稍後再試。";
+    console.error('Error calling analyze-food-image edge function:', error)
+    return 'AI分析時發生錯誤，請稍後再試。'
   }
-};
+}
