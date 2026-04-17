@@ -10,7 +10,7 @@
  */
 import type { AppRecord } from '../types'
 import { supabase } from './supabase'
-import { getBoundStudentId } from './bindingService'
+import { getBoundStudentId, getBoundLineUserId } from './bindingService'
 
 const RETRY_QUEUE_KEY = 'bebetter-sync-retry'
 
@@ -64,16 +64,17 @@ function toDateStr(record: AppRecord): string {
 
 async function syncOne(entry: QueueEntry): Promise<boolean> {
   if (!supabase) return false
-  const { error } = await supabase
-    .from('student_daily_logs')
-    .upsert({
-      id: entry.id,
-      student_id: entry.studentId,
-      record_date: entry.recordDate,
-      record_type: entry.recordType,
-      data: entry.data,
-      synced_at: new Date().toISOString(),
-    }, { onConflict: 'student_id,id' })
+  const lineUserId = getBoundLineUserId()
+  if (!lineUserId) return false
+
+  const { error } = await supabase.rpc('sync_daily_log', {
+    p_line_user_id: lineUserId,
+    p_student_id:   entry.studentId,
+    p_id:           entry.id,
+    p_record_date:  entry.recordDate,
+    p_record_type:  entry.recordType,
+    p_data:         entry.data,
+  })
 
   return !error
 }
