@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { composeMealCard, composeBehaviorCard, composeWeeklyReport, composeProgramSummary, generateStructuredData } from '../../services/canvasExport';
 import { getLiffUserName } from '../../services/liffService';
+import { getBoundLineUserId } from '../../services/bindingService';
+import { fetchMyWeekScores } from '../../services/supabase';
 import { saveMealDraft, saveBehaviorDraft, setDuplicatedImage } from '../../services/draftStorage';
 import { sortTags, toDateString } from '../../constants';
 import type { AppRecord, MealRecord, BehaviorRecord } from '../../types';
+import type { WeekScore } from '../../services/supabase';
 
 interface HistoryViewerProps {
   records: AppRecord[];
@@ -401,8 +404,19 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
   const [addingPeriod, setAddingPeriod] = useState(false);
   const [newPlanId, setNewPlanId] = useState<CoursePlanId | null>(null);
   const [newStartDate, setNewStartDate] = useState('');
+  const [weekScores, setWeekScores] = useState<Map<number, WeekScore>>(new Map());
+  const [scoresLoaded, setScoresLoaded] = useState(false);
   const weeks = buildWeeks(records, periods);
   const officialWeeks = weeks.filter(w => !w.isPractice);
+
+  useEffect(() => {
+    const lineUserId = getBoundLineUserId();
+    if (!lineUserId) { setScoresLoaded(true); return; }
+    fetchMyWeekScores(lineUserId).then(scores => {
+      setWeekScores(new Map(scores.map(s => [s.week_num, s])));
+      setScoresLoaded(true);
+    });
+  }, []);
   const [expandedKey, setExpandedKey] = useState<string | null>(() => {
     if (weeks.length === 0) return null;
     const last = weeks[weeks.length - 1];
@@ -925,6 +939,28 @@ const WeeklySummary: React.FC<{ records: AppRecord[] }> = ({ records }) => {
 
                     {/* Week summary stats */}
                     <WeekStats records={week.records} />
+
+                    {/* 營養師評分 */}
+                    {scoresLoaded && !week.isPractice && week.weekNum > 0 && (() => {
+                      const score = weekScores.get(week.weekNum);
+                      const hasScore = score !== undefined && score.total !== null;
+                      return (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg mt-1 border border-blue-100">
+                          <span className="text-sm">📊</span>
+                          <span className="text-xs text-blue-700 font-medium">營養師評分：</span>
+                          {hasScore ? (
+                            <span className={`text-xs font-bold ${(score!.total ?? 0) >= 80 ? 'text-green-600' : (score!.total ?? 0) >= 60 ? 'text-yellow-600' : 'text-red-500'}`}>
+                              {score!.total} 分
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">尚未評分</span>
+                          )}
+                          {score?.comment && (
+                            <span className="text-xs text-blue-500 ml-1 line-clamp-1">{score.comment}</span>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Action buttons — not for practice weeks */}
                     {!week.isPractice && (

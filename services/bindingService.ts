@@ -19,6 +19,10 @@ export function getBoundStudentName(): string | null {
   return localStorage.getItem(STORAGE_KEY_STUDENT_NAME)
 }
 
+export function getBoundLineUserId(): string | null {
+  return localStorage.getItem(STORAGE_KEY_LINE_USER_ID)
+}
+
 export function isBound(): boolean {
   return !!localStorage.getItem(STORAGE_KEY_STUDENT_ID)
 }
