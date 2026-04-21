@@ -8,6 +8,7 @@ import { DailyChecklist } from './components/behavior-record/DailyChecklist';
 import { HistoryViewer } from './components/history/HistoryViewer';
 import { PlantGrowth } from './components/PlantGrowth';
 import { NutritionistView } from './components/nutritionist/NutritionistView';
+import { WeekScoreCard } from './components/WeekScoreCard';
 import { getAllRecords, migrateFromLocalStorage } from './services/storage';
 import { processRetryQueue, pendingSyncCount } from './services/syncService';
 import { isBound, getBoundStudentName } from './services/bindingService';
@@ -100,6 +101,7 @@ const MainApp: React.FC = () => {
 
       {/* Main content */}
       <main className="pt-4">
+        {activeTab !== 'history' && <WeekScoreCard />}
         {activeTab === 'meal' && (
           <FoodRecordFlow onRecordSaved={handleRecordSaved} />
         )}
