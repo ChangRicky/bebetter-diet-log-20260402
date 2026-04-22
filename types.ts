@@ -61,4 +61,4 @@ export interface BehaviorRecord {
 
 export type AppRecord = MealRecord | BehaviorRecord;
 
-export type TabType = 'meal' | 'behavior' | 'history';
+export type TabType = 'meal' | 'behavior' | 'history' | 'help';

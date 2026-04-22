@@ -6,6 +6,7 @@ import { BindingPage } from './components/BindingPage';
 import { FoodRecordFlow } from './components/food-record/FoodRecordFlow';
 import { DailyChecklist } from './components/behavior-record/DailyChecklist';
 import { HistoryViewer } from './components/history/HistoryViewer';
+import { HelpPage } from './components/help/HelpPage';
 import { PlantGrowth } from './components/PlantGrowth';
 import { NutritionistView } from './components/nutritionist/NutritionistView';
 import { WeekScoreCard } from './components/WeekScoreCard';
@@ -101,7 +102,7 @@ const MainApp: React.FC = () => {
 
       {/* Main content */}
       <main className="pt-4">
-        {activeTab !== 'history' && <WeekScoreCard />}
+        {activeTab !== 'history' && activeTab !== 'help' && <WeekScoreCard />}
         {activeTab === 'meal' && (
           <FoodRecordFlow onRecordSaved={handleRecordSaved} />
         )}
@@ -115,6 +116,7 @@ const MainApp: React.FC = () => {
             onDuplicateBehavior={() => setActiveTab('behavior')}
           />
         )}
+        {activeTab === 'help' && <HelpPage />}
       </main>
 
       {/* Bottom tab bar */}

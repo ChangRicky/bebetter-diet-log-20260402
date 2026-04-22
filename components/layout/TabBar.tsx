@@ -10,6 +10,7 @@ const tabs: { id: TabType; label: string; icon: string }[] = [
   { id: 'meal', label: '飲食紀錄', icon: '📷' },
   { id: 'behavior', label: '行為指標', icon: '📋' },
   { id: 'history', label: '歷史紀錄', icon: '📁' },
+  { id: 'help', label: '求救', icon: '🆘' },
 ];
 
 export const TabBar: React.FC<TabBarProps> = ({ activeTab, onTabChange }) => {
